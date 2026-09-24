@@ -1,45 +1,25 @@
-/* Sevens design tokens — crème + apple lime. Light on :root, dark under
-   prefers-color-scheme. Text pairs hold 4.5:1 or more (WCAG 2.x formula). */
+/* Sevens design tokens — light-only apple theme (Part D). */
 :root {
-  --bg: #fbf5e8;
-  --surface: #fffdf6;
-  --surface-2: #f1ead8;
-  --border: #e4dcc6;
-  --control: #857f6b;
-  --text: #222117;
-  --muted: #6b6759;
-  --accent: #3f6212;
-  --on-accent: #ffffff;
-  --lime: #a3e635;
-  --on-lime: #1a2e05;
-  --accent-soft: #eff6dc;
+  color-scheme: light;
+  --bg: #fbf8f1;
+  --surface: #ffffff;
+  --surface-2: #f3efe4;
+  --border: #e4decf;
+  --control: #8c927f;
+  --text: #1f2a14;
+  --muted: #5e6552;
+  --apple: #c7ea7c;
+  --apple-soft: #eaf6cf;
+  --apple-strong: #3f6b0f;
   --ok: #166534;
   --ok-soft: #e7f5ec;
-  --warn: #a15c07;
+  --warn: #9a5b06;
   --warn-soft: #fdf3e2;
   --bad: #b42318;
   --bad-soft: #fdecea;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #16150f;
-    --surface: #201f18;
-    --surface-2: #2a2820;
-    --border: #3a372c;
-    --control: #8a8471;
-    --text: #f5f2e6;
-    --muted: #b3ae9d;
-    --accent: #bef264;
-    --on-accent: #16150f;
-    --lime: #a3e635;
-    --on-lime: #16150f;
-    --accent-soft: #232d12;
-    --ok: #4ade80;
-    --ok-soft: #15291c;
-    --warn: #fbbf24;
-    --warn-soft: #2e2410;
-    --bad: #f87171;
-    --bad-soft: #321a18;
-  }
+  --lime: var(--apple);
+  --on-lime: var(--text);
+  --accent: var(--apple-strong);
+  --on-accent: #ffffff;
+  --accent-soft: var(--apple-soft);
 }

@@ -13,6 +13,10 @@ export interface Subject {
   level: Level;
   grade: Grade | null;
   locked: boolean;
+  /** Catalogue base name for fixed slots, '__other' for free text, '__custom' for anything else. */
+  base?: string | null;
+  /** Language for Language A/B, ab initio and Classical languages. */
+  lang?: string | null;
 }
 
 export interface Input {
@@ -194,6 +198,165 @@ export const COMMON_LANGUAGES = [
   'Korean',
   'Russian',
 ];
+
+/** Languages for the "Which language?" field (quick picks + Latin + free text). */
+export const SLOT_LANGUAGES = [...COMMON_LANGUAGES, 'Latin'];
+
+export const OTHER_VALUE = '__other';
+export const CUSTOM_VALUE = '__custom';
+
+// --- Fixed subject slots (Part B): six cards, each bound to one group. ---
+
+export interface SlotDef {
+  title: string;
+  group: string;
+  subjects: string[];
+}
+
+const ARTS = ['Dance', 'Film', 'Music', 'Theatre', 'Visual arts'];
+
+export const SLOTS: SlotDef[] = [
+  {
+    title: 'Language & literature',
+    group: 'Group 1',
+    subjects: [
+      'Language A: Literature',
+      'Language A: Language and literature',
+      'Literature and performance',
+    ],
+  },
+  {
+    title: 'Language acquisition',
+    group: 'Group 2',
+    subjects: ['Language B', 'Language ab initio', 'Classical languages'],
+  },
+  {
+    title: 'Individuals & societies',
+    group: 'Group 3',
+    subjects: [
+      'Business management',
+      'Digital society',
+      'Economics',
+      'Geography',
+      'Global politics',
+      'History',
+      'Philosophy',
+      'Psychology',
+      'Social and cultural anthropology',
+      'World religions',
+      'Environmental systems and societies',
+    ],
+  },
+  {
+    title: 'Sciences',
+    group: 'Group 4',
+    subjects: [
+      'Biology',
+      'Chemistry',
+      'Computer science',
+      'Design technology',
+      'Physics',
+      'Sports, exercise and health science',
+      'Environmental systems and societies',
+    ],
+  },
+  {
+    title: 'Mathematics',
+    group: 'Group 5',
+    subjects: [
+      'Mathematics: analysis and approaches',
+      'Mathematics: applications and interpretation',
+    ],
+  },
+  { title: 'The arts or a second choice', group: 'Group 6', subjects: ARTS },
+];
+
+/** Slot indexes (0-based) whose subjects may fill slot 6 as a second choice. */
+export const SECOND_CHOICE_SLOTS = [0, 1, 2, 3];
+
+/** Dropdown options for slot 6: arts, then every slot 1–4 subject once. */
+export function slotSixSubjects(): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  const push = (name: string) => {
+    if (!seen.has(name)) {
+      seen.add(name);
+      out.push(name);
+    }
+  };
+  for (const n of SLOTS[5]!.subjects) push(n);
+  for (const si of SECOND_CHOICE_SLOTS) {
+    for (const n of SLOTS[si]!.subjects) push(n);
+  }
+  return out;
+}
+
+/** Short display forms used after a language, e.g. "Turkish B". */
+const LANGUAGE_SHORT: Record<string, string> = {
+  'Language A: Literature': 'A: Literature',
+  'Language A: Language and literature': 'A: Language and literature',
+  'Language B': 'B',
+  'Language ab initio': 'ab initio',
+  'Classical languages': 'Classical languages',
+};
+
+export function isLanguageSubject(base: string | null | undefined): boolean {
+  return base != null && Object.prototype.hasOwnProperty.call(LANGUAGE_SHORT, base);
+}
+
+/** Saved display name, e.g. "English A: Language and literature" or "Turkish B". */
+export function composeName(base: string, lang: string | null | undefined): string {
+  const l = (lang ?? '').trim();
+  if (!l || !isLanguageSubject(base)) return base;
+  return `${l} ${LANGUAGE_SHORT[base]}`;
+}
+
+/**
+ * Work out the dropdown base + language from a saved display name.
+ * Unknown names become '__custom' so old links keep loading.
+ */
+export function inferSlotBase(name: string): { base: string; lang: string | null } {
+  const trimmed = name.trim();
+  for (const g of SUBJECT_CATALOGUE) {
+    for (const s of g.subjects) {
+      if (s.name.toLowerCase() === trimmed.toLowerCase() && trimmed !== '') {
+        return { base: s.name, lang: null };
+      }
+    }
+  }
+  for (const lang of SLOT_LANGUAGES) {
+    const prefix = `${lang} `;
+    if (trimmed.toLowerCase().startsWith(prefix.toLowerCase())) {
+      const rest = trimmed.slice(prefix.length);
+      for (const [full, short] of Object.entries(LANGUAGE_SHORT)) {
+        if (rest.toLowerCase() === short.toLowerCase() || rest.toLowerCase() === full.toLowerCase()) {
+          return { base: full, lang };
+        }
+      }
+    }
+  }
+  return { base: CUSTOM_VALUE, lang: null };
+}
+
+/** Normalized name for duplicate checks (case-insensitive, trimmed). */
+export function normalizeSubjectName(name: string): string {
+  return name.trim().toLowerCase();
+}
+
+/**
+ * Flags slots holding an already-picked subject (second and later
+ * occurrences, including ESS in both slots). The flagged slots don't count.
+ */
+export function duplicateSlots(names: string[]): boolean[] {
+  const seen = new Set<string>();
+  return names.map((n) => {
+    const key = normalizeSubjectName(n);
+    if (key === '') return false;
+    if (seen.has(key)) return true;
+    seen.add(key);
+    return false;
+  });
+}
 
 // --- Context statistics (section 3.6, May 2025 final statistical bulletin) ---
 

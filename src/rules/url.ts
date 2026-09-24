@@ -3,6 +3,8 @@ import type { CoreGrade, Grade, Input, Level, Offer } from './data';
 export interface ParsedState {
   input: Input;
   offer: Offer;
+  /** Teacher grade boundaries per slot (slot 6 = standalone calculator): min % for grades 2–7. */
+  bounds: Record<number, number[]>;
   damaged: boolean;
 }
 
@@ -32,7 +34,11 @@ function encodeName(name: string): string {
   return encodeURIComponent(name.slice(0, 40)).replace(/\./g, '%2E');
 }
 
-export function encodeState(input: Input, offer: Offer): string {
+export function encodeState(
+  input: Input,
+  offer: Offer,
+  bounds?: Record<number, (number | null)[]>,
+): string {
   const s = input.subjects
     .map((sub) => {
       const lv: string = sub.level === 'HL' ? 'H' : 'S';
@@ -59,6 +65,15 @@ export function encodeState(input: Input, offer: Offer): string {
     .map((sub, i) => (sub.locked ? String(i + 1) : null))
     .filter((x): x is string => x !== null);
   if (locked.length > 0) parts.push(`lk=${locked.join('.')}`);
+  if (bounds) {
+    const gb: string[] = [];
+    for (const [k, v] of Object.entries(bounds)) {
+      if (/^[0-6]$/.test(k) && Array.isArray(v) && v.length === 6 && v.every((n) => typeof n === 'number')) {
+        gb.push(`${k}:${(v as number[]).join(',')}`);
+      }
+    }
+    if (gb.length > 0) parts.push(`gb=${gb.join('.')}`);
+  }
   const qs = parts.join('&');
   // Cap whole URL query at 1500 chars (spec 4.5).
   if (qs.length > 1500) return qs.slice(0, 1500);
@@ -72,6 +87,7 @@ export function parseState(search: string): ParsedState {
   let damaged = false;
   const input = defaultInput();
   const offer = defaultOffer();
+  const bounds: Record<number, number[]> = {};
 
   try {
     const noHash = search.startsWith('#') ? search.slice(1) : search;
@@ -80,7 +96,7 @@ export function parseState(search: string): ParsedState {
       damaged = true;
       q = q.slice(0, 1500);
     }
-    if (!q) return { input, offer, damaged };
+    if (!q) return { input, offer, bounds, damaged };
 
     const params = new URLSearchParams(q);
 
@@ -212,11 +228,28 @@ export function parseState(search: string): ParsedState {
         if (input.subjects[idx]) input.subjects[idx]!.locked = true;
       }
     }
+    // gb (teacher grade boundaries per slot: min % for grades 2-7)
+    const gbRaw = extractRawParam(q, 'gb') ?? params.get('gb');
+    if (gbRaw !== null && gbRaw !== '') {
+      for (const entry of gbRaw.split('.')) {
+        const m = entry.match(/^([0-6]):(\d{1,3}(?:,\d{1,3}){5})$/);
+        if (!m) {
+          damaged = true;
+          continue;
+        }
+        const nums = m[2]!.split(',').map(Number);
+        if (nums.some((n) => n < 0 || n > 100)) {
+          damaged = true;
+          continue;
+        }
+        bounds[Number(m[1])] = nums;
+      }
+    }
   } catch {
     damaged = true;
   }
 
-  return { input, offer, damaged };
+  return { input, offer, bounds, damaged };
 }
 
 /** Get the raw (still %-encoded) value of a query param for dot-safe parsing. */

@@ -4,8 +4,8 @@ import AxeBuilder from '@axe-core/playwright';
 test('scenario 1: Deniz sees 33/45 on track and P01 plan', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'Try an example' }).click();
-  await expect(page.getByText('33/45').first()).toBeVisible();
-  await expect(page.getByText('Diploma on track').first()).toBeVisible();
+  await expect(page.locator('.result-card').getByText('33/45')).toBeVisible();
+  await expect(page.locator('.result-card').getByText('Diploma on track')).toBeVisible();
   // Offer 36 is prefilled by example; plan should list raises.
   await expect(page.getByText('Raise 3 grades to meet it:').first()).toBeVisible();
 });
@@ -17,14 +17,14 @@ test('scenario 2: grade 1 shows red not on track naming subject', async ({ page 
   const rows = page.locator('.subj-card');
   const last = rows.nth(5);
   await last.getByRole('radio', { name: '1' }).click();
-  await expect(page.getByText('Diploma not on track').first()).toBeVisible();
+  await expect(page.locator('.result-card').getByText('Diploma not on track')).toBeVisible();
   await expect(page.getByText(/A 1 in .* means no diploma/).first()).toBeVisible();
 });
 
 test('share link round trip', async ({ page, context }) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'Try an example' }).click();
-  await expect(page.getByText('33/45').first()).toBeVisible();
+  await expect(page.locator('.result-card').getByText('33/45')).toBeVisible();
   // Wait for the 300ms-debounced hash sync of the EXAMPLE (names appear
   // in the hash; the empty state syncs first, so bare /s=/ would race).
   await expect(page).toHaveURL(/Chemistry/);
@@ -32,7 +32,7 @@ test('share link round trip', async ({ page, context }) => {
   expect(url).toContain('s=');
   const page2 = await context.newPage();
   await page2.goto(url);
-  await expect(page2.getByText('33/45').first()).toBeVisible();
+  await expect(page2.locator('.result-card').getByText('33/45')).toBeVisible();
 });
 
 test('hostile link opens clean page with note', async ({ page }) => {
@@ -45,7 +45,7 @@ test('axe zero violations', async ({ page }) => {
     await page.goto('/');
     if (state === 'example') {
       await page.getByRole('button', { name: 'Try an example' }).click();
-      await expect(page.getByText('33/45').first()).toBeVisible();
+      await expect(page.locator('.result-card').getByText('33/45')).toBeVisible();
     }
     const res = await new AxeBuilder({ page }).analyze();
     expect(res.violations).toEqual([]);
