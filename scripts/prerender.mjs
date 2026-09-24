@@ -1,13 +1,17 @@
 import { readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 
-// Minimal prerender checks: both pages contain their headings/intro, and the
-// Cloudflare beacon survives the build exactly once per page.
+// Minimal prerender checks: pages contain their headings, the Cloudflare
+// beacon survives the build exactly once per page, and the old subject page
+// redirects to the in-page calculator.
 const pages = [
-  { file: '../dist/index.html', needed: ['Your IB Diploma total', 'Subjects', 'How it works'] },
   {
-    file: '../dist/subject.html',
-    needed: ['Subject grade calculator', 'Pick a subject', 'Your marks'],
+    file: '../dist/index.html',
+    needed: ['Your IB Diploma total', 'Subjects', 'Subject grade'],
+  },
+  {
+    file: '../dist/more.html',
+    needed: ['More: offers', 'Your offer', 'How it works'],
   },
 ];
 for (const page of pages) {
@@ -29,4 +33,15 @@ for (const page of pages) {
   }
   console.log(`beacon ok (${page.file})`);
 }
+const redirectUrl = new URL('../dist/subject.html', import.meta.url);
+if (!existsSync(redirectUrl)) {
+  console.error('../dist/subject.html not found; run vite build first');
+  process.exit(1);
+}
+const redirect = await readFile(redirectUrl, 'utf8');
+if (!redirect.includes('index.html#subject')) {
+  console.error('../dist/subject.html does not redirect to index.html#subject');
+  process.exit(1);
+}
+console.log('redirect ok (../dist/subject.html)');
 console.log('prerender ok');

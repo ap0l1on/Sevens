@@ -1,9 +1,24 @@
 import type { CoreGrade, Grade, Input, Level, Offer } from './data';
+import { baseFromSlug, slugifyBase } from '../data/subjectGrade';
 
 export interface ParsedState {
   input: Input;
   offer: Offer;
   damaged: boolean;
+}
+
+/** In-page subject calculator state, persisted in the URL hash. */
+export interface CalcState {
+  base: string | null;
+  level: Level;
+  fromSlot: number | null;
+  marks: (number | null)[];
+  maxEdits: (number | null)[];
+  bounds: number[] | null;
+}
+
+export function defaultCalc(): CalcState {
+  return { base: null, level: 'HL', fromSlot: null, marks: [], maxEdits: [], bounds: null };
 }
 
 function defaultSubjects(): Input['subjects'] {
@@ -32,7 +47,7 @@ function encodeName(name: string): string {
   return encodeURIComponent(name.slice(0, 40)).replace(/\./g, '%2E');
 }
 
-export function encodeState(input: Input, offer: Offer): string {
+export function encodeState(input: Input, offer: Offer, calc?: CalcState): string {
   const s = input.subjects
     .map((sub) => {
       const lv: string = sub.level === 'HL' ? 'H' : 'S';
@@ -59,6 +74,24 @@ export function encodeState(input: Input, offer: Offer): string {
     .map((sub, i) => (sub.locked ? String(i + 1) : null))
     .filter((x): x is string => x !== null);
   if (locked.length > 0) parts.push(`lk=${locked.join('.')}`);
+  if (calc) {
+    if (calc.base !== null) {
+      parts.push(`cs=${encodeURIComponent(slugifyBase(calc.base))}`);
+      parts.push(`cl=${calc.level}`);
+    }
+    if (calc.fromSlot !== null) parts.push(`cf=${calc.fromSlot}`);
+    if (calc.marks.some((m) => m !== null && m !== undefined)) {
+      parts.push(
+        `cm=${calc.marks.map((m) => (m === null || m === undefined ? '' : String(m))).join(',')}`,
+      );
+    }
+    if (calc.maxEdits.some((m) => m !== null && m !== undefined)) {
+      parts.push(
+        `cx=${calc.maxEdits.map((m) => (m === null || m === undefined ? '' : String(m))).join(',')}`,
+      );
+    }
+    if (calc.bounds !== null) parts.push(`cbb=${calc.bounds.join(',')}`);
+  }
   const qs = parts.join('&');
   // Cap whole URL query at 1500 chars (spec 4.5).
   if (qs.length > 1500) return qs.slice(0, 1500);
@@ -68,10 +101,11 @@ export function encodeState(input: Input, offer: Offer): string {
 /** Parse a state payload (URL hash content, with or without leading '#', or a
  * legacy query string with or without leading '?'). Never throws. State lives
  * in the hash so grades are never sent to any server. */
-export function parseState(search: string): ParsedState {
+export function parseState(search: string): ParsedState & { calc: CalcState | null } {
   let damaged = false;
   const input = defaultInput();
   const offer = defaultOffer();
+  let calc: CalcState | null = null;
 
   try {
     const noHash = search.startsWith('#') ? search.slice(1) : search;
@@ -80,7 +114,7 @@ export function parseState(search: string): ParsedState {
       damaged = true;
       q = q.slice(0, 1500);
     }
-    if (!q) return { input, offer, damaged };
+    if (!q) return { input, offer, calc, damaged };
 
     const params = new URLSearchParams(q);
 
@@ -212,11 +246,81 @@ export function parseState(search: string): ParsedState {
         if (input.subjects[idx]) input.subjects[idx]!.locked = true;
       }
     }
+    // In-page calculator slice (cs/cl/cf/cm/cx/cbb). Unknown keys are ignored.
+    const calcParsed = parseCalc(q);
+    if (calcParsed.damaged) damaged = true;
+    if (calcParsed.calc !== null) calc = calcParsed.calc;
   } catch {
     damaged = true;
   }
 
-  return { input, offer, damaged };
+  return { input, offer, calc, damaged };
+}
+
+/** Parse a comma list of marks: '' becomes null, anything else must be a finite number ≥ 0. */
+function parseNumList(raw: string): { values: (number | null)[] } | null {
+  const parts = raw.split(',');
+  if (parts.length > 10) return null;
+  const values: (number | null)[] = [];
+  for (const p of parts) {
+    if (p === '') {
+      values.push(null);
+      continue;
+    }
+    const n = Number(p);
+    if (!Number.isFinite(n) || n < 0 || n > 100000) return null;
+    values.push(n);
+  }
+  return { values };
+}
+
+/** Parse the in-page calculator slice of the hash. Never throws. */
+export function parseCalc(q: string): { calc: CalcState | null; damaged: boolean } {
+  let damaged = false;
+  const params = new URLSearchParams(q);
+  const keys = ['cs', 'cl', 'cf', 'cm', 'cx', 'cbb'] as const;
+  const present = keys.some((k) => {
+    const v = params.get(k);
+    return v !== null && v !== '';
+  });
+  if (!present) return { calc: null, damaged };
+  const calc = defaultCalc();
+  const cs = params.get('cs');
+  if (cs !== null && cs !== '') {
+    const found = baseFromSlug(cs);
+    if (found === null) damaged = true;
+    else calc.base = found;
+  }
+  const cl = params.get('cl');
+  if (cl === 'HL' || cl === 'SL') calc.level = cl;
+  else if (cl !== null && cl !== '') damaged = true;
+  const cf = params.get('cf');
+  if (cf !== null && cf !== '') {
+    if (/^[0-5]$/.test(cf)) calc.fromSlot = Number(cf);
+    else damaged = true;
+  }
+  const cm = params.get('cm');
+  if (cm !== null && cm !== '') {
+    const parsed = parseNumList(cm);
+    if (parsed === null) damaged = true;
+    else calc.marks = parsed.values;
+  }
+  const cx = params.get('cx');
+  if (cx !== null && cx !== '') {
+    const parsed = parseNumList(cx);
+    if (parsed === null) damaged = true;
+    else calc.maxEdits = parsed.values;
+  }
+  const cbb = params.get('cbb');
+  if (cbb !== null && cbb !== '') {
+    const nums = cbb.split(',').map(Number);
+    if (nums.length === 6 && nums.every((n) => Number.isInteger(n) && n >= 0 && n <= 100)) {
+      calc.bounds = nums;
+    } else {
+      damaged = true;
+    }
+  }
+  return { calc, damaged };
 }
 
 /**

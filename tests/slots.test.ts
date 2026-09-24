@@ -12,6 +12,8 @@ import {
   type Grade,
 } from '../src/rules/data';
 import { parseState, parseSubjectUse } from '../src/rules/url';
+import { defaultCalc, type CalcState } from '../src/rules/url';
+import { defaultInput, defaultOffer, encodeState } from '../src/rules/url';
 
 describe('fixed slots', () => {
   it('has six slots with the specified headings and counts', () => {
@@ -83,6 +85,73 @@ describe('duplicates', () => {
         'environmental systems and societies',
       ]),
     ).toEqual([false, false, true, false, false, false, true]);
+  });
+});
+
+describe('calculator slice in the hash', () => {
+  const calc: CalcState = {
+    base: 'Chemistry',
+    level: 'SL',
+    fromSlot: 3,
+    marks: [24, 18, null, 19],
+    maxEdits: [null, null, null, null],
+    bounds: [15, 27, 38, 49, 60, 75],
+  };
+
+  it('round-trips the full calculator state', () => {
+    const qs = encodeState(defaultInput(), defaultOffer(), calc);
+    expect(qs).toContain('cs=chemistry');
+    expect(qs).toContain('cf=3');
+    expect(qs).toContain('cbb=15,27,38,49,60,75');
+    const parsed = parseState(`#${qs}`);
+    expect(parsed.damaged).toBe(false);
+    expect(parsed.calc).toEqual({
+      base: 'Chemistry',
+      level: 'SL',
+      fromSlot: 3,
+      marks: [24, 18, null, 19],
+      maxEdits: [],
+      bounds: [15, 27, 38, 49, 60, 75],
+    });
+  });
+
+  it('omits empty calculator parts and absent slices', () => {
+    expect(parseState('?s=H6-Chemistry').calc).toBeNull();
+    const qs = encodeState(defaultInput(), defaultOffer(), defaultCalc());
+    expect(qs).not.toContain('cs=');
+    expect(qs).not.toContain('cm=');
+    const sparse: CalcState = { ...defaultCalc(), marks: [null, 5], maxEdits: [null, 50] };
+    const sparseQs = encodeState(defaultInput(), defaultOffer(), sparse);
+    expect(sparseQs).toContain('cm=,5');
+    expect(sparseQs).toContain('cx=,50');
+    expect(parseState(`#${sparseQs}`).calc).toEqual({
+      base: null,
+      level: 'HL',
+      fromSlot: null,
+      marks: [null, 5],
+      maxEdits: [null, 50],
+      bounds: null,
+    });
+  });
+
+  it('drops bad calculator values without throwing', () => {
+    expect(parseState('#cs=nope&cl=SL').damaged).toBe(true);
+    expect(parseState('#cs=chemistry&cl=ML').damaged).toBe(true);
+    expect(parseState('#cf=9').damaged).toBe(true);
+    expect(parseState('#cm=1,xx').damaged).toBe(true);
+    expect(parseState('#cm=' + '1,'.repeat(11)).damaged).toBe(true);
+    expect(parseState('#cx=1,-2').damaged).toBe(true);
+    expect(parseState('#cbb=1,2,3').damaged).toBe(true);
+    expect(parseState('#cs=&cl=&cf=&cm=&cx=&cbb=').damaged).toBe(false);
+    const parsed = parseState('#cs=chemistry&cl=HL&cf=0&cm=1,2&cbb=1,2,3,4,5,6');
+    expect(parsed.calc).toEqual({
+      base: 'Chemistry',
+      level: 'HL',
+      fromSlot: 0,
+      marks: [1, 2],
+      maxEdits: [],
+      bounds: [1, 2, 3, 4, 5, 6],
+    });
   });
 });
 

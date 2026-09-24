@@ -23,7 +23,9 @@ test('scenario 1: Deniz sees 33/45 on track and P01 plan', async ({ page }) => {
   await page.getByRole('button', { name: 'Try an example' }).click();
   await expect(page.locator('.result-card').getByText('33/45')).toBeVisible();
   await expect(page.locator('.result-card').getByText('Diploma on track')).toBeVisible();
-  // Offer 36 is prefilled by example; plan should list raises.
+  // Offer 36 is prefilled by example; the plan lives on more.html now.
+  await page.getByRole('link', { name: 'More: offers and FAQ' }).first().click();
+  await expect(page).toHaveURL(/more\.html/);
   await expect(page.getByText('Raise 3 grades to meet it:').first()).toBeVisible();
 });
 

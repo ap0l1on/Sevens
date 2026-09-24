@@ -2,9 +2,7 @@ import { useEffect, useMemo, useReducer, useRef, useState } from 'preact/hooks';
 import { calculate, failMessage, structureMessage } from './rules/calculate';
 import {
   bandForTotal,
-  composeName,
   CUSTOM_VALUE,
-  inferSlotBase,
   isLanguageSubject,
   isSlOnlySubject,
   OTHER_VALUE,
@@ -14,205 +12,27 @@ import {
   duplicateSlots,
   type Grade,
   type Input,
-  type Offer,
 } from './rules/data';
 import { planOffer } from './rules/planner';
-import { slugifyBase } from './data/subjectGrade';
-import { defaultInput, defaultOffer, encodeState, parseState, parseSubjectUse } from './rules/url';
+import { reducer, withInferredBases, type Action, type State } from './store';
+import { DEFAULT_BOUNDARIES } from './data/boundaries';
+import { getSubjectEntry } from './data/components';
+import {
+  findSlotForBase,
+  gradeForTotal,
+  validateSubjectMarks,
+  weightedTotal,
+} from './data/subjectGrade';
+import {
+  defaultCalc,
+  defaultInput,
+  defaultOffer,
+  encodeState,
+  parseState,
+  parseSubjectUse,
+  type CalcState,
+} from './rules/url';
 import { track } from './analytics';
-
-type State = {
-  input: Input;
-  offer: Offer;
-  showSlOffer: boolean;
-  damaged: boolean;
-  startSnapshot: { input: Input; total: number } | null;
-  shareMsg: string;
-};
-
-type Action =
-  | { type: 'INIT'; input: Input; offer: Offer; damaged: boolean }
-  | { type: 'SET_NAME'; index: number; name: string }
-  | { type: 'SET_SLOT_SUBJECT'; index: number; base: string }
-  | { type: 'SET_LANG'; index: number; lang: string | null }
-  | { type: 'SET_LEVEL'; index: number; level: 'HL' | 'SL' }
-  | { type: 'SET_GRADE'; index: number; grade: Grade | null }
-  | { type: 'TOGGLE_LOCK'; index: number }
-  | { type: 'SET_TOK'; tok: Input['tok'] }
-  | { type: 'SET_EE'; ee: Input['ee'] }
-  | { type: 'SET_CAS'; cas: boolean }
-  | { type: 'SET_OFFER_TOTAL'; total: number | null }
-  | { type: 'SET_OFFER_HL'; hl: Grade[] }
-  | { type: 'SET_OFFER_SL'; sl: Grade[] }
-  | { type: 'ADD_SUBJECT_MIN' }
-  | { type: 'SET_SUBJECT_MIN'; pos: number; index: number; min: Grade }
-  | { type: 'REMOVE_SUBJECT_MIN'; pos: number }
-  | { type: 'SET_SHOW_SL'; show: boolean }
-  | { type: 'LOAD_EXAMPLE' }
-  | { type: 'BACK_TO_START' }
-  | { type: 'SET_START'; snapshot: { input: Input; total: number } }
-  | { type: 'SHARE_MSG'; msg: string };
-
-function denizExample(): { input: Input; offer: Offer } {
-  return {
-    input: {
-      subjects: [
-        {
-          name: 'English A: Language and literature',
-          level: 'SL',
-          grade: 5,
-          locked: false,
-          base: 'Language A: Language and literature',
-          lang: 'English',
-        },
-        {
-          name: 'Turkish B',
-          level: 'SL',
-          grade: 5,
-          locked: false,
-          base: 'Language B',
-          lang: 'Turkish',
-        },
-        { name: 'History', level: 'SL', grade: 4, locked: false, base: 'History' },
-        { name: 'Chemistry', level: 'HL', grade: 6, locked: false, base: 'Chemistry' },
-        {
-          name: 'Mathematics: analysis and approaches',
-          level: 'HL',
-          grade: 6,
-          locked: false,
-          base: 'Mathematics: analysis and approaches',
-        },
-        { name: 'Physics', level: 'HL', grade: 5, locked: false, base: 'Physics' },
-      ],
-      tok: 'B',
-      ee: 'C',
-      cas: true,
-    },
-    offer: { total: 36, hl: [], sl: [], subjectMins: [] },
-  };
-}
-
-/** Fill base/lang from a saved display name (old links carry names only). */
-function withInferredBases(input: Input): Input {
-  return {
-    ...input,
-    subjects: input.subjects.map((s) => {
-      if (s.base !== undefined) return s;
-      if (s.name.trim() === '') return { ...s, base: null, lang: null };
-      const inferred = inferSlotBase(s.name);
-      return { ...s, base: inferred.base, lang: inferred.lang };
-    }),
-  };
-}
-
-function reducer(s: State, a: Action): State {
-  switch (a.type) {
-    case 'INIT':
-      return {
-        ...s,
-        input: withInferredBases(a.input),
-        offer: a.offer,
-        damaged: a.damaged,
-      };
-    case 'SET_NAME': {
-      const subjects = s.input.subjects.map((sub, i) =>
-        i === a.index
-          ? {
-              ...sub,
-              name: a.name.slice(0, 40),
-              base: sub.base === OTHER_VALUE || sub.base === CUSTOM_VALUE ? sub.base : CUSTOM_VALUE,
-            }
-          : sub,
-      );
-      return { ...s, input: { ...s.input, subjects } };
-    }
-    case 'SET_SLOT_SUBJECT': {
-      const subjects = s.input.subjects.map((sub, i) => {
-        if (i !== a.index) return sub;
-        if (a.base === OTHER_VALUE || a.base === CUSTOM_VALUE) {
-          return { ...sub, base: a.base, lang: null, name: '' };
-        }
-        return { ...sub, base: a.base, lang: null, name: a.base };
-      });
-      return { ...s, input: { ...s.input, subjects } };
-    }
-    case 'SET_LANG': {
-      const subjects = s.input.subjects.map((sub, i) => {
-        if (i !== a.index) return sub;
-        const base = sub.base ?? '';
-        return { ...sub, lang: a.lang, name: composeName(base, a.lang) };
-      });
-      return { ...s, input: { ...s.input, subjects } };
-    }
-    case 'SET_LEVEL': {
-      const subjects = s.input.subjects.map((sub, i) =>
-        i === a.index ? { ...sub, level: a.level } : sub,
-      );
-      return { ...s, input: { ...s.input, subjects } };
-    }
-    case 'SET_GRADE': {
-      const subjects = s.input.subjects.map((sub, i) =>
-        i === a.index ? { ...sub, grade: a.grade } : sub,
-      );
-      return { ...s, input: { ...s.input, subjects } };
-    }
-    case 'TOGGLE_LOCK': {
-      const subjects = s.input.subjects.map((sub, i) =>
-        i === a.index ? { ...sub, locked: !sub.locked } : sub,
-      );
-      return { ...s, input: { ...s.input, subjects } };
-    }
-    case 'SET_TOK':
-      return { ...s, input: { ...s.input, tok: a.tok } };
-    case 'SET_EE':
-      return { ...s, input: { ...s.input, ee: a.ee } };
-    case 'SET_CAS':
-      return { ...s, input: { ...s.input, cas: a.cas } };
-    case 'SET_OFFER_TOTAL':
-      return { ...s, offer: { ...s.offer, total: a.total } };
-    case 'SET_OFFER_HL':
-      return { ...s, offer: { ...s.offer, hl: a.hl } };
-    case 'SET_OFFER_SL':
-      return { ...s, offer: { ...s.offer, sl: a.sl } };
-    case 'ADD_SUBJECT_MIN': {
-      if (s.offer.subjectMins.length >= 3) return s;
-      return {
-        ...s,
-        offer: { ...s.offer, subjectMins: [...s.offer.subjectMins, { index: 0, min: 7 as Grade }] },
-      };
-    }
-    case 'SET_SUBJECT_MIN': {
-      const subjectMins = s.offer.subjectMins.map((m, i) =>
-        i === a.pos ? { index: a.index, min: a.min } : m,
-      );
-      return { ...s, offer: { ...s.offer, subjectMins } };
-    }
-    case 'REMOVE_SUBJECT_MIN': {
-      return {
-        ...s,
-        offer: { ...s.offer, subjectMins: s.offer.subjectMins.filter((_, i) => i !== a.pos) },
-      };
-    }
-    case 'SET_SHOW_SL':
-      return { ...s, showSlOffer: a.show };
-    case 'LOAD_EXAMPLE': {
-      const ex = denizExample();
-      return { ...s, input: ex.input, offer: ex.offer };
-    }
-    case 'BACK_TO_START': {
-      if (!s.startSnapshot) return s;
-      // Deep copy to avoid mutation.
-      const snap: Input = JSON.parse(JSON.stringify(s.startSnapshot.input)) as Input;
-      return { ...s, input: snap };
-    }
-    case 'SET_START':
-      return { ...s, startSnapshot: s.startSnapshot ?? a.snapshot };
-    case 'SHARE_MSG':
-      return { ...s, shareMsg: a.msg };
-    default:
-      return s;
-  }
-}
 
 function Icon({ d }: { d: string }) {
   return (
@@ -243,6 +63,7 @@ function SubjectRow({
   dispatch,
   hlDisabledReason,
   dup,
+  onWorkOut,
 }: {
   index: number;
   name: string;
@@ -254,6 +75,7 @@ function SubjectRow({
   dispatch: (a: Action) => void;
   hlDisabledReason: string | null;
   dup: boolean;
+  onWorkOut: () => void;
 }) {
   const slot = SLOTS[index] as (typeof SLOTS)[number];
   const label = `${name.trim() || `Subject ${index + 1}`} ${level} grade`;
@@ -293,11 +115,7 @@ function SubjectRow({
   }
 
   return (
-    <div
-      class="subj-card"
-      id={`slot-card-${index}`}
-      onKeyDown={onKey as unknown as (e: Event) => void}
-    >
+    <div class="subj-card" onKeyDown={onKey as unknown as (e: Event) => void}>
       <div class="subj-top">
         <span class="subj-title">
           Subject {index + 1} · {slot.title} ({slot.group})
@@ -462,7 +280,7 @@ function SubjectRow({
           </button>
         </div>
       </div>
-      <div class="grade-row" role="radiogroup" aria-label={label}>
+      <div class="grade-row seg" role="radiogroup" aria-label={label}>
         {([1, 2, 3, 4, 5, 6, 7] as Grade[]).map((g) => (
           <button
             key={g}
@@ -470,12 +288,7 @@ function SubjectRow({
             role="radio"
             aria-checked={grade === g}
             aria-label={`${g}`}
-            class="grade-btn seg"
-            style={{
-              border: '1px solid var(--control)',
-              background: grade === g ? 'var(--lime)' : 'var(--surface-2)',
-              color: grade === g ? 'var(--on-lime)' : 'var(--text)',
-            }}
+            class="grade-btn"
             onClick={() => dispatch({ type: 'SET_GRADE', index, grade: grade === g ? null : g })}
           >
             {g}
@@ -483,17 +296,265 @@ function SubjectRow({
         ))}
       </div>
       {grade === 1 && <p class="row-note bad">A grade 1 means no diploma, whatever the total.</p>}
-      {base !== null && base !== OTHER_VALUE && base !== CUSTOM_VALUE ? (
-        <a
-          class="linklike"
-          href={`subject.html#s=${encodeURIComponent(slugifyBase(base))}&l=${level}`}
+      <button type="button" class="linklike" onClick={onWorkOut}>
+        Work out this grade ›
+      </button>
+    </div>
+  );
+}
+
+function calcGroups(): { label: string; names: string[] }[] {
+  const groups = SLOTS.slice(0, 5).map((s, i) => ({
+    label: `Group ${i + 1} — ${s.title}`,
+    names: [...s.subjects],
+  }));
+  const arts = [...SLOTS[5]!.subjects];
+  const second = slotSixSubjects().filter((n) => !arts.includes(n));
+  groups.push({ label: 'Group 6 — The arts', names: arts });
+  groups.push({ label: 'Or a second subject from groups 1–4', names: second });
+  return groups;
+}
+
+const CALC_GROUPS = calcGroups();
+
+function CalculatorSection({
+  calc,
+  dispatch,
+  onUseGrade,
+}: {
+  calc: CalcState;
+  dispatch: (a: Action) => void;
+  onUseGrade: (grade: Grade) => void;
+}) {
+  const [draft, setDraft] = useState<(number | null)[] | null>(null);
+  const slOnly = calc.base !== null && isSlOnlySubject(calc.base);
+  const level = slOnly ? 'SL' : calc.level;
+  const entry = calc.base === null ? null : getSubjectEntry(calc.base, level);
+  const shownBounds = draft ?? calc.bounds ?? [...DEFAULT_BOUNDARIES];
+
+  function editBound(bi: number, v: string) {
+    const next = [0, 1, 2, 3, 4, 5].map((j) => shownBounds[j] ?? null);
+    next[bi] = v === '' ? null : Number(v);
+    setDraft(next);
+    dispatch({
+      type: 'SET_CALC_BOUNDS',
+      bounds: next.every((n) => typeof n === 'number') ? (next as number[]) : null,
+    });
+  }
+
+  const comps = entry?.components ?? [];
+  const marks: (number | null)[] = comps.map((_, i) => calc.marks[i] ?? null);
+  const maxes: (number | null)[] = comps.map((c, i) => {
+    const edit = calc.maxEdits[i];
+    return edit !== null && edit !== undefined ? edit : c.max;
+  });
+  const errors = validateSubjectMarks(marks, maxes);
+  const missing = errors.filter((e) => e.code === 'missing').map((e) => comps[e.index]?.name ?? '');
+  const total =
+    errors.length === 0
+      ? weightedTotal(
+          marks as number[],
+          maxes as number[],
+          comps.map((c) => c.weight),
+        )
+      : null;
+  const boundsUsed = calc.bounds ?? DEFAULT_BOUNDARIES;
+  const grade = total === null ? null : gradeForTotal(total, boundsUsed);
+  const anyEditableMax = comps.some((c) => c.max === null || c.status === 'unverified');
+
+  return (
+    <div>
+      <div class="pick-card">
+        <label class="slot-label" htmlFor="calc-subject">
+          Subject
+        </label>
+        <select
+          id="calc-subject"
+          class="slot-select"
+          value={calc.base ?? ''}
+          onChange={(e) => {
+            const v = (e.target as HTMLSelectElement).value;
+            dispatch({ type: 'CALC_SET_BASE', base: v === '' ? null : v });
+          }}
         >
-          Work out this grade ›
-        </a>
+          <option value="">Choose a subject…</option>
+          {CALC_GROUPS.map((g) => (
+            <optgroup key={g.label} label={g.label}>
+              {g.names.map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </optgroup>
+          ))}
+        </select>
+        <div class="subj-level">
+          <span class="help" id="calc-level-h">
+            Level
+          </span>
+          <div class="seg hlsl" role="radiogroup" aria-labelledby="calc-level-h">
+            <button
+              type="button"
+              aria-pressed={level === 'HL'}
+              disabled={slOnly}
+              title={slOnly ? 'Only offered at SL' : undefined}
+              onClick={() => dispatch({ type: 'CALC_SET_LEVEL', level: 'HL' })}
+            >
+              HL
+            </button>
+            <button
+              type="button"
+              aria-pressed={level === 'SL'}
+              onClick={() => dispatch({ type: 'CALC_SET_LEVEL', level: 'SL' })}
+            >
+              SL
+            </button>
+          </div>
+        </div>
+        {slOnly && <p class="row-note">Only offered at SL.</p>}
+      </div>
+      {calc.base === null ? (
+        <p class="row-note">Choose a subject above to see its components.</p>
+      ) : entry === null ? (
+        <div>
+          <p>This subject is coming soon.</p>
+          <p class="help">
+            Try the <a href="#diploma">diploma calculator</a> for your total out of 45.
+          </p>
+        </div>
       ) : (
-        <a class="linklike" href="subject.html">
-          Work out this grade ›
-        </a>
+        <div>
+          {!entry.components.every((c) => c.status === 'confirmed') && (
+            <p class="row-note">
+              Weightings from the current subject guide. Check with your teacher.
+            </p>
+          )}
+          {anyEditableMax && <p class="row-note">Check these maximum marks with your teacher.</p>}
+          <div class="mark-list">
+            {comps.map((c, i) => {
+              const err = errors.find((e) => e.index === i);
+              const editable = c.max === null || c.status === 'unverified';
+              const shownMax = maxes[i];
+              return (
+                <div key={c.id} class="mark-bigrow">
+                  <span class="mark-name">{c.name}</span>
+                  <div class="mark-inputs">
+                    <input
+                      type="number"
+                      min={0}
+                      inputMode="numeric"
+                      aria-label={`${c.name} mark`}
+                      aria-invalid={err !== undefined && err.code !== 'missing'}
+                      class={err !== undefined && err.code !== 'missing' ? 'invalid' : ''}
+                      placeholder="Mark"
+                      value={marks[i] ?? ''}
+                      onInput={(e) => {
+                        const v = (e.target as HTMLInputElement).value;
+                        dispatch({
+                          type: 'CALC_SET_MARK',
+                          index: i,
+                          value: v === '' ? null : Number(v),
+                        });
+                      }}
+                    />
+                    {editable ? (
+                      <label class="max-edit">
+                        /{' '}
+                        <input
+                          type="number"
+                          min={1}
+                          inputMode="numeric"
+                          aria-label={`${c.name} maximum marks`}
+                          placeholder={c.max === null ? 'Max' : String(c.max)}
+                          value={calc.maxEdits[i] ?? ''}
+                          onInput={(e) => {
+                            const v = (e.target as HTMLInputElement).value;
+                            dispatch({
+                              type: 'CALC_SET_MAX',
+                              index: i,
+                              value: v === '' ? null : Number(v),
+                            });
+                          }}
+                        />
+                      </label>
+                    ) : (
+                      <span class="mark-max">/ {shownMax}</span>
+                    )}
+                  </div>
+                  {err?.code === 'over' && <p class="row-note bad">Max is {shownMax}.</p>}
+                  {err?.code === 'negative' && <p class="row-note bad">Can&apos;t be negative.</p>}
+                </div>
+              );
+            })}
+          </div>
+          <div aria-live="polite">
+            {total === null ? (
+              <p class="row-note">
+                Add all your marks to see your grade
+                {missing.length > 0 ? `: ${missing.join(', ')}` : '.'}
+              </p>
+            ) : (
+              <div class="subject-result">
+                <div class="subject-grade num">{grade}</div>
+                <p>
+                  <strong>Predicted grade: {grade}</strong>
+                  <br />
+                  <span class="help">
+                    {calc.base} {level}
+                  </span>
+                </p>
+                <p class="help">Estimate. Real grade boundaries change every exam session.</p>
+              </div>
+            )}
+          </div>
+          <details class="bounds-details">
+            <summary>Have your teacher&apos;s grade boundaries?</summary>
+            <p class="help">
+              Minimum weighted total (out of 100) for each grade. Saved in the link.
+            </p>
+            <div class="bounds-row">
+              {[2, 3, 4, 5, 6, 7].map((g, bi) => (
+                <label key={g}>
+                  {g}
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    aria-label={`Minimum total for grade ${g}`}
+                    placeholder={String(DEFAULT_BOUNDARIES[bi])}
+                    value={shownBounds[bi] ?? ''}
+                    onInput={(e) => editBound(bi, (e.target as HTMLInputElement).value)}
+                  />
+                </label>
+              ))}
+            </div>
+            {calc.bounds !== null && (
+              <button
+                type="button"
+                class="linklike"
+                onClick={() => {
+                  setDraft(null);
+                  dispatch({ type: 'SET_CALC_BOUNDS', bounds: null });
+                }}
+              >
+                Back to the default estimate
+              </button>
+            )}
+          </details>
+          {grade !== null && (
+            <p>
+              <button type="button" class="btn btn-primary" onClick={() => onUseGrade(grade)}>
+                Use this grade ›
+              </button>
+            </p>
+          )}
+          {grade !== null && (
+            <p class="row-note">
+              An estimate. Your final grade depends on the official grade boundaries for your exam
+              session and on moderation of your internal assessment.
+            </p>
+          )}
+        </div>
       )}
     </div>
   );
@@ -503,12 +564,14 @@ export function App() {
   const [state, dispatch] = useReducer<State, Action>(reducer, {
     input: defaultInput(),
     offer: defaultOffer(),
+    calc: defaultCalc(),
     showSlOffer: false,
     damaged: false,
     startSnapshot: null,
     shareMsg: 'Copy link',
   });
   const [resultOpen, setResultOpen] = useState(false);
+  const [flashSlot, setFlashSlot] = useState<number | null>(null);
   // Duplicate picks (second and later) don't count toward the total.
   const dupFlags = useMemo(
     () => duplicateSlots(state.input.subjects.map((s) => s.name)),
@@ -580,17 +643,79 @@ export function App() {
         input = { ...input, subjects };
       }
     }
-    dispatch({ type: 'INIT', input, offer: parsed.offer, damaged: parsed.damaged });
+    dispatch({
+      type: 'INIT',
+      input,
+      offer: parsed.offer,
+      calc: parsed.calc,
+      damaged: parsed.damaged,
+    });
   }, []);
 
-  // Hash sync after 300ms no input.
+  // Hash sync after 300ms no input. One writer: the full state every time.
   useEffect(() => {
     const t = setTimeout(() => {
-      const qs = encodeState(state.input, state.offer);
+      const qs = encodeState(state.input, state.offer, state.calc);
       window.history.replaceState(null, '', qs ? `#${qs}` : window.location.pathname);
     }, 300);
     return () => clearTimeout(t);
-  }, [state.input, state.offer]);
+  }, [state.input, state.offer, state.calc]);
+
+  function scrollToSection(id: string) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    el.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'start' });
+    const heading = el.querySelector('h2');
+    if (heading === null) return;
+    if (reduced) {
+      (heading as HTMLElement).focus({ preventScroll: true });
+    } else {
+      window.setTimeout(() => (heading as HTMLElement).focus({ preventScroll: true }), 450);
+    }
+  }
+
+  function workOut(index: number) {
+    const sub = state.input.subjects[index];
+    if (!sub) return;
+    const level = sub.level;
+    dispatch({ type: 'CALC_FILL', base: sub.base ?? null, level, fromSlot: index });
+    scrollToSection('subject');
+  }
+
+  function useGrade(grade: Grade) {
+    const base = state.calc.base;
+    const from = state.calc.fromSlot;
+    let slot: number;
+    if (from !== null && from !== undefined) {
+      slot = from;
+    } else if (base === null) {
+      slot = 5;
+    } else {
+      const match = state.input.subjects.findIndex((s) => s.base === base);
+      const empty = state.input.subjects.findIndex((s) => s.name.trim() === '');
+      slot = match !== -1 ? match : empty !== -1 ? empty : findSlotForBase(base);
+    }
+    const target = state.input.subjects[slot];
+    if (target && base !== null && (target.base ?? null) !== base) {
+      dispatch({ type: 'SET_SLOT_SUBJECT', index: slot, base });
+      if (target.level !== state.calc.level) {
+        dispatch({ type: 'SET_LEVEL', index: slot, level: state.calc.level });
+      }
+    }
+    dispatch({ type: 'SET_GRADE', index: slot, grade });
+    dispatch({ type: 'CALC_USED' });
+    dispatch({ type: 'CALC_USED' });
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (!reduced) {
+      setFlashSlot(slot);
+      window.setTimeout(() => setFlashSlot(null), 600);
+    }
+    const card = document.getElementById(`slot-card-${slot}`);
+    if (card) {
+      card.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'center' });
+    }
+  }
 
   // What-if starting point: first full result.
   useEffect(() => {
@@ -733,24 +858,47 @@ export function App() {
 
   const band = result.total !== null ? bandForTotal(result.total) : null;
 
+  const moreHref = useMemo(
+    () => `more.html#${encodeState(state.input, state.offer, state.calc)}`,
+    [state.input, state.offer, state.calc],
+  );
+
   return (
     <div class="page">
       <header class="header">
-        <a class="wordmark" href="/" aria-label="Sevens home">
+        <a class="wordmark" href="index.html" aria-label="Sevens home">
           <span class="mark" aria-hidden="true">
             7
           </span>
           Sevens
         </a>
         <nav aria-label="Page sections">
-          <a class="header-link" href="index.html" aria-current="page">
+          <a
+            class="header-link"
+            href="#diploma"
+            onClick={(e) => {
+              e.preventDefault();
+              scrollToSection('diploma');
+            }}
+          >
             Diploma score
           </a>
-          <a class="header-link" href="subject.html">
+          <a
+            class="header-link"
+            href="#subject"
+            onClick={(e) => {
+              e.preventDefault();
+              scrollToSection('subject');
+            }}
+          >
             Subject grade
           </a>
-          <a class="header-link" href="#faq">
-            How it works
+          <a
+            class="header-link header-more"
+            href={moreHref}
+            aria-label="More: offers and FAQ"
+          >
+            More<span class="sr-only">: offers and FAQ</span>
           </a>
         </nav>
       </header>
@@ -773,13 +921,20 @@ export function App() {
           )}
         </div>
 
-        <div class="layout">
+        <div class="layout" id="diploma">
           <div class="main-col">
+            <h2 class="section-title" id="diploma-h" tabIndex={-1}>
+              <span class="badge">1</span> Diploma score
+            </h2>
             <section class="section" aria-labelledby="subjects-h">
               <h2 id="subjects-h">Subjects</h2>
               <div class="slot-grid">
                 {state.input.subjects.map((s, i) => (
-                  <div key={i} id={`slot-card-${i}`}>
+                  <div
+                    key={i}
+                    id={`slot-card-${i}`}
+                    class={flashSlot === i ? 'flash-slot' : undefined}
+                  >
                     <SubjectRow
                       index={i}
                       name={s.name}
@@ -791,6 +946,7 @@ export function App() {
                       dispatch={dispatch}
                       hlDisabledReason={slOnlyAt[i] ?? null}
                       dup={dupFlags[i] ?? false}
+                      onWorkOut={() => workOut(i)}
                     />
                     {(s.grade === 2 || s.grade === 3) && (count2 > 2 || countLe3 > 3) && (
                       <p class="row-note warn">This grade counts toward the 2s and 3s limits.</p>
@@ -868,332 +1024,6 @@ export function App() {
                   <span>CAS complete or on track</span>
                 </label>
               </div>
-            </section>
-
-            <section class="section" aria-labelledby="offer-h">
-              <h2 id="offer-h">Your offer</h2>
-              <p class="help">
-                Copy it from your offer letter, e.g. &quot;38 points with 7, 6, 6 at HL&quot;.
-              </p>
-              <div class="offer-grid card">
-                <label>
-                  <span class="help">Total points (24–45)</span>
-                  <input
-                    type="number"
-                    min={24}
-                    max={45}
-                    value={state.offer.total ?? ''}
-                    placeholder="e.g. 38"
-                    inputMode="numeric"
-                    style={{
-                      display: 'block',
-                      height: '44px',
-                      borderRadius: '12px',
-                      border: '1px solid var(--control)',
-                      padding: '0 12px',
-                      fontSize: '16px',
-                      width: '160px',
-                      background: 'var(--surface)',
-                      color: 'var(--text)',
-                    }}
-                    onInput={(e) => {
-                      const v = (e.target as HTMLInputElement).value;
-                      if (v === '') dispatch({ type: 'SET_OFFER_TOTAL', total: null });
-                      else {
-                        const n = Number(v);
-                        if (Number.isInteger(n) && n >= 24 && n <= 45)
-                          dispatch({ type: 'SET_OFFER_TOTAL', total: n });
-                      }
-                    }}
-                  />
-                </label>
-                <div>
-                  <span class="help">HL grades needed (e.g. 7 6 6)</span>
-                  <div class="offer-row">
-                    {[0, 1, 2, 3].map((pos) => (
-                      <select
-                        key={pos}
-                        aria-label={`HL requirement ${pos + 1}`}
-                        value={state.offer.hl[pos] ?? ''}
-                        style={{
-                          height: '44px',
-                          borderRadius: '8px',
-                          minWidth: '64px',
-                          fontSize: '16px',
-                        }}
-                        onChange={(e) => {
-                          const v = (e.target as HTMLSelectElement).value;
-                          const cur = [...state.offer.hl];
-                          // Ensure length: pad with current values.
-                          while (cur.length <= pos) cur.push(7 as Grade);
-                          if (v === '') {
-                            const next = state.offer.hl.filter((_, i) => i !== pos);
-                            dispatch({ type: 'SET_OFFER_HL', hl: next });
-                          } else {
-                            const g = Number(v) as Grade;
-                            const next = [...state.offer.hl];
-                            if (pos < next.length) next[pos] = g;
-                            else {
-                              while (next.length < pos) next.push(g);
-                              next.push(g);
-                            }
-                            next.sort((a, b) => b - a);
-                            dispatch({ type: 'SET_OFFER_HL', hl: next.slice(0, 4) });
-                          }
-                        }}
-                      >
-                        <option value="">—</option>
-                        {[7, 6, 5, 4, 3, 2, 1].map((g) => (
-                          <option key={g} value={g}>
-                            {g}
-                          </option>
-                        ))}
-                      </select>
-                    ))}
-                  </div>
-                </div>
-                {!state.showSlOffer ? (
-                  <button
-                    type="button"
-                    class="btn btn-ghost"
-                    onClick={() => dispatch({ type: 'SET_SHOW_SL', show: true })}
-                  >
-                    Add SL requirement
-                  </button>
-                ) : (
-                  <div>
-                    <span class="help">SL grades needed</span>
-                    <div class="offer-row">
-                      {[0, 1, 2].map((pos) => (
-                        <select
-                          key={pos}
-                          aria-label={`SL requirement ${pos + 1}`}
-                          value={state.offer.sl[pos] ?? ''}
-                          style={{
-                            height: '44px',
-                            borderRadius: '8px',
-                            minWidth: '64px',
-                            fontSize: '16px',
-                          }}
-                          onChange={(e) => {
-                            const v = (e.target as HTMLSelectElement).value;
-                            if (v === '') {
-                              dispatch({
-                                type: 'SET_OFFER_SL',
-                                sl: state.offer.sl.filter((_, i) => i !== pos),
-                              });
-                            } else {
-                              const g = Number(v) as Grade;
-                              const next = [...state.offer.sl];
-                              if (pos < next.length) next[pos] = g;
-                              else {
-                                while (next.length < pos) next.push(g);
-                                next.push(g);
-                              }
-                              next.sort((a, b) => b - a);
-                              dispatch({ type: 'SET_OFFER_SL', sl: next.slice(0, 3) });
-                            }
-                          }}
-                        >
-                          <option value="">—</option>
-                          {[7, 6, 5, 4, 3, 2, 1].map((g) => (
-                            <option key={g} value={g}>
-                              {g}
-                            </option>
-                          ))}
-                        </select>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                <div>
-                  <span class="help">Subject minimum (up to 3)</span>
-                  {state.offer.subjectMins.map((m, pos) => (
-                    <div key={pos} class="offer-row" style={{ marginBottom: '8px' }}>
-                      <select
-                        aria-label={`Subject minimum ${pos + 1} subject`}
-                        value={m.index}
-                        style={{
-                          height: '44px',
-                          borderRadius: '8px',
-                          fontSize: '16px',
-                          maxWidth: '220px',
-                        }}
-                        onChange={(e) =>
-                          dispatch({
-                            type: 'SET_SUBJECT_MIN',
-                            pos,
-                            index: Number((e.target as HTMLSelectElement).value),
-                            min: m.min,
-                          })
-                        }
-                      >
-                        {state.input.subjects.map((s, i) => (
-                          <option key={i} value={i}>
-                            #{i + 1} {s.name || `Subject ${i + 1}`} ({s.level})
-                          </option>
-                        ))}
-                      </select>
-                      <select
-                        aria-label={`Subject minimum ${pos + 1} grade`}
-                        value={m.min}
-                        style={{
-                          height: '44px',
-                          borderRadius: '8px',
-                          minWidth: '64px',
-                          fontSize: '16px',
-                        }}
-                        onChange={(e) =>
-                          dispatch({
-                            type: 'SET_SUBJECT_MIN',
-                            pos,
-                            index: m.index,
-                            min: Number((e.target as HTMLSelectElement).value) as Grade,
-                          })
-                        }
-                      >
-                        {[7, 6, 5, 4, 3, 2, 1].map((g) => (
-                          <option key={g} value={g}>
-                            {g}
-                          </option>
-                        ))}
-                      </select>
-                      <button
-                        type="button"
-                        class="btn btn-ghost"
-                        onClick={() => dispatch({ type: 'REMOVE_SUBJECT_MIN', pos })}
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  ))}
-                  {state.offer.subjectMins.length < 3 && (
-                    <button
-                      type="button"
-                      class="btn btn-ghost"
-                      onClick={() => dispatch({ type: 'ADD_SUBJECT_MIN' })}
-                    >
-                      Add subject minimum
-                    </button>
-                  )}
-                </div>
-                <div aria-live="polite">
-                  {plan === null && (
-                    <p class="row-note">Add an offer to see the grades you need.</p>
-                  )}
-                  {plan?.kind === 'ALREADY_MET' && (
-                    <p>
-                      <strong>You already meet this offer.</strong> You have {plan.margin} points of
-                      margin on the total.
-                    </p>
-                  )}
-                  {plan?.kind === 'PLAN' && (
-                    <div>
-                      <p>
-                        <strong>Raise {plan.changes.length} grades to meet it:</strong>
-                      </p>
-                      <ul class="plan-list">
-                        {plan.changes.map((c) => {
-                          const sub = state.input.subjects[c.index];
-                          return (
-                            <li key={c.index}>
-                              <span class="plan-hl">
-                                {sub?.name || `Subject ${c.index + 1}`} {sub?.level}:{' '}
-                                {c.from ?? '—'} → {c.to}
-                              </span>
-                            </li>
-                          );
-                        })}
-                      </ul>
-                      <p>That gives {plan.newTotal}/45, diploma on track.</p>
-                      {plan.alternatives.length > 0 && (
-                        <details>
-                          <summary>Other ways ({plan.alternatives.length})</summary>
-                          {plan.alternatives.map((alt, ai) => (
-                            <ul key={ai} class="plan-list">
-                              {alt.changes.map((c) => {
-                                const sub = state.input.subjects[c.index];
-                                return (
-                                  <li key={c.index}>
-                                    {sub?.name || `Subject ${c.index + 1}`}: {c.from ?? '—'} →{' '}
-                                    {c.to}
-                                  </li>
-                                );
-                              })}
-                            </ul>
-                          ))}
-                        </details>
-                      )}
-                    </div>
-                  )}
-                  {plan?.kind === 'UNREACHABLE' && (
-                    <p>
-                      <strong>Not reachable with these settings.</strong> Even with every unlocked
-                      subject at 7 you&apos;d have {plan.maxTotal}. Try unlocking a subject or check
-                      the offer.
-                    </p>
-                  )}
-                  {plan?.kind === 'BLOCKED' && (
-                    <p>
-                      <strong>Grades alone can&apos;t fix this:</strong>{' '}
-                      {plan.codes
-                        .map((c) => {
-                          const ctx = {
-                            total: result.total,
-                            hlPoints: result.hlPoints,
-                            slPoints: result.slPoints,
-                            subjects: state.input.subjects.map((s) => ({
-                              name: s.name,
-                              grade: s.grade,
-                            })),
-                          };
-                          return failMessage(c, ctx);
-                        })
-                        .join(' ')}
-                    </p>
-                  )}
-                </div>
-              </div>
-            </section>
-
-            <section class="section faq" id="faq" aria-labelledby="faq-h">
-              <h2 id="faq-h">How it works</h2>
-              {[
-                {
-                  q: 'How is the IB total calculated?',
-                  a: 'Add your six subject grades (each 1–7) to get up to 42 points, then add 0–3 core points from TOK and the Extended Essay. The maximum is 45. HL and SL grades count equally toward the total.',
-                },
-                {
-                  q: 'How do TOK and EE points work?',
-                  a: 'TOK and EE are each graded A–E. Together they give 0–3 points. An E in either means no diploma. For example, A/A gives 3, B/C gives 2, and C/D gives 0.',
-                },
-                {
-                  q: 'What are the diploma failing conditions?',
-                  a: 'You need 24+ points, CAS complete, no E in TOK or EE, no grade 1, at most two grade 2s, at most three grades of 3 or below, 12+ HL points and 9+ SL points (or 5+ with two SL subjects).',
-                },
-                {
-                  q: 'What if I take 4 HL subjects?',
-                  a: 'Only the three highest HL grades count for the 12-point rule, and with two SL subjects you need at least 5 SL points. The page says when this applies.',
-                },
-                {
-                  q: 'Does SL count less than HL?',
-                  a: 'No. Every subject grade counts equally toward the total out of 45. Levels only matter for the 12-point HL and 9- or 5-point SL rules.',
-                },
-                {
-                  q: 'Are these official grade boundaries?',
-                  a: 'No. Grade boundaries are given only to coordinators, so this calculator works on grades 1–7 only. Estimates only. Your school and the IB decide your final results.',
-                },
-              ].map((item, i) => (
-                <details
-                  key={i}
-                  onToggle={(e) => {
-                    if ((e.target as HTMLDetailsElement).open) track('faq_opened', { q: i + 1 });
-                  }}
-                >
-                  <summary>{item.q}</summary>
-                  <p>{item.a}</p>
-                </details>
-              ))}
             </section>
           </div>
 
@@ -1383,6 +1213,29 @@ export function App() {
           </div>
         </div>
 
+        <div class="section-divider">
+          <button type="button" class="linklike" onClick={() => scrollToSection('subject')}>
+            Need a subject grade? Work it out below ↓
+          </button>
+        </div>
+
+        <section class="section" id="subject" aria-labelledby="subject-h">
+          <h2 class="section-title" id="subject-h" tabIndex={-1}>
+            <span class="badge">2</span> Subject grade
+          </h2>
+          <p class="help">
+            Work out a subject grade from Paper marks and the IA, then fill it into a slot.
+          </p>
+          <div class="card">
+            <CalculatorSection
+              key={`${state.calc.base ?? 'none'}|${state.calc.level}`}
+              calc={state.calc}
+              dispatch={dispatch}
+              onUseGrade={useGrade}
+            />
+          </div>
+        </section>
+
         <footer class="footer">
           <p>
             This work/product/service has been developed independently from and is not endorsed by
@@ -1406,6 +1259,8 @@ export function App() {
             </a>
             {' · '}
             <span>Rules checked against ibo.org on 2026-09-24</span>
+            {' · '}
+            <a href={moreHref}>More: offers &amp; FAQ</a>
           </p>
         </footer>
       </main>
