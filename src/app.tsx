@@ -630,7 +630,6 @@ export function App() {
                         type="button"
                         role="radio"
                         aria-checked={state.input.tok === g}
-                        aria-pressed={state.input.tok === g}
                         onClick={() =>
                           dispatch({ type: 'SET_TOK', tok: state.input.tok === g ? null : g })
                         }
@@ -651,7 +650,6 @@ export function App() {
                         type="button"
                         role="radio"
                         aria-checked={state.input.ee === g}
-                        aria-pressed={state.input.ee === g}
                         onClick={() =>
                           dispatch({ type: 'SET_EE', ee: state.input.ee === g ? null : g })
                         }

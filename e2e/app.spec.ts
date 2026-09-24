@@ -25,6 +25,8 @@ test('share link round trip', async ({ page, context }) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'Try an example' }).click();
   await expect(page.getByText('33/45').first()).toBeVisible();
+  // Wait for the 300ms-debounced hash sync before reading the URL.
+  await expect(page).toHaveURL(/s=/);
   const url = page.url();
   expect(url).toContain('s=');
   const page2 = await context.newPage();
