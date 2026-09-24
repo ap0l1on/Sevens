@@ -1,42 +1,27 @@
-import { useEffect, useMemo, useState } from 'preact/hooks';
+import { render } from 'preact';
+import { useEffect, useState } from 'preact/hooks';
 import { DEFAULT_BOUNDARIES } from './data/boundaries';
 import { getSubjectEntry } from './data/components';
 import {
-  baseFromSlug,
   diplomaLinkFor,
   effectiveBounds,
   encodeSubjectHash,
   findSlotForBase,
   gradeForTotal,
   parseSubjectHash,
-  slugifyBase,
   validateSubjectMarks,
   weightedTotal,
 } from './data/subjectGrade';
 import { isSlOnlySubject, SLOTS, slotSixSubjects } from './rules/data';
-import type { Grade, Level } from './rules/data';
-import { track } from './analytics';
+import type { Level } from './rules/data';
 import './ui/tokens.css';
 import './ui/app.css';
 
-function Icon({ d }: { d: string }) {
-  return (
-    <svg
-      width="20"
-      height="20"
-      viewBox="0 0 20 20"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1.75}
-      aria-hidden="true"
-    >
-      <path d={d} strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
 function groupOptions(): { label: string; names: string[] }[] {
-  const groups = SLOTS.slice(0, 5).map((s, i) => ({ label: `Group ${i + 1}`, names: [...s.subjects] }));
+  const groups = SLOTS.slice(0, 5).map((s, i) => ({
+    label: `Group ${i + 1} — ${s.title}`,
+    names: [...s.subjects],
+  }));
   const arts = [...SLOTS[5]!.subjects];
   const second = slotSixSubjects().filter((n) => !arts.includes(n));
   groups.push({ label: 'Group 6 — The arts', names: arts });
@@ -51,21 +36,39 @@ function SubjectForm({
   level,
   bounds,
   onBounds,
+  seedMarks,
+  onMarks,
 }: {
   base: string;
   level: Level;
   bounds: number[] | null;
   onBounds: (b: number[] | null) => void;
+  seedMarks: (number | null)[];
+  onMarks: (m: (number | null)[]) => void;
 }) {
   const entry = getSubjectEntry(base, level);
+  const comps = entry?.components ?? [];
   const [marks, setMarks] = useState<string[]>(() =>
-    Array.from({ length: entry?.components.length ?? 0 }, () => ''),
+    comps.map((_, i) => {
+      const m = seedMarks[i];
+      return typeof m === 'number' ? String(m) : '';
+    }),
   );
-  const [maxEdits, setMaxEdits] = useState<string[]>(() =>
-    Array.from({ length: entry?.components.length ?? 0 }, () => ''),
+  const [maxEdits, setMaxEdits] = useState<string[]>(() => comps.map(() => ''));
+  const [draftBounds, setDraftBounds] = useState<(number | null)[]>(
+    () => bounds ?? [...DEFAULT_BOUNDARIES],
   );
 
-  const comps = entry?.components ?? [];
+  useEffect(() => {
+    onMarks(
+      marks.map((m) => {
+        if (m.trim() === '') return null;
+        const n = Number(m);
+        return Number.isFinite(n) ? n : null;
+      }),
+    );
+  }, [marks]);
+
   const maxes: (number | null)[] = comps.map((c, i) => {
     const edit = (maxEdits[i] ?? '').trim();
     if (edit !== '') {
@@ -79,15 +82,14 @@ function SubjectForm({
     const n = Number(m);
     return Number.isFinite(n) ? n : null;
   });
+  const weights = comps.map((c) => c.weight);
   const errors = validateSubjectMarks(parsed, maxes);
   const missing = errors.filter((e) => e.code === 'missing').map((e) => comps[e.index]?.name ?? '');
-  const over = errors.find((e) => e.code === 'over');
-  const negative = errors.find((e) => e.code === 'negative');
-  const total = errors.length === 0 ? weightedTotal(parsed as number[], maxes as number[], comps.map((c) => c.weight)) : null;
+  const total =
+    errors.length === 0 ? weightedTotal(parsed as number[], maxes as number[], weights) : null;
   const boundsUsed = effectiveBounds(bounds);
-  const customBounds = bounds !== null;
   const grade = total === null ? null : gradeForTotal(total, boundsUsed);
-  const anyEditable = comps.some((c) => c.max === null || c.status === 'unverified');
+  const anyEditableMax = comps.some((c) => c.max === null || c.status === 'unverified');
 
   function setMark(i: number, v: string) {
     setMarks(marks.map((m, j) => (j === i ? v : m)));
@@ -97,13 +99,11 @@ function SubjectForm({
   }
 
   return (
-    <div>
+    <div class="subject-form-top">
       {entry !== null && !entry.components.every((c) => c.status === 'confirmed') && (
         <p class="row-note">Weightings from the current subject guide. Check with your teacher.</p>
       )}
-      {anyEditable && (
-        <p class="row-note">Check these maximum marks with your teacher.</p>
-      )}
+      {anyEditableMax && <p class="row-note">Check these maximum marks with your teacher.</p>}
       <div class="mark-list">
         {comps.map((c, i) => {
           const err = errors.find((e) => e.index === i);
@@ -118,7 +118,7 @@ function SubjectForm({
                   min={0}
                   inputMode="numeric"
                   aria-label={`${c.name} mark`}
-                  aria-invalid={err !== undefined}
+                  aria-invalid={err !== undefined && err.code !== 'missing'}
                   class={err !== undefined && err.code !== 'missing' ? 'invalid' : ''}
                   placeholder="Mark"
                   value={marks[i] ?? ''}
@@ -141,9 +141,7 @@ function SubjectForm({
                   <span class="mark-max">/ {shownMax}</span>
                 )}
               </div>
-              {err?.code === 'over' && (
-                <p class="row-note bad">Max is {shownMax}.</p>
-              )}
+              {err?.code === 'over' && <p class="row-note bad">Max is {shownMax}.</p>}
               {err?.code === 'negative' && <p class="row-note bad">Can&apos;t be negative.</p>}
             </div>
           );
@@ -169,7 +167,6 @@ function SubjectForm({
           </div>
         )}
       </div>
-      {over === undefined && negative === undefined && <span />}
       <details class="bounds-details">
         <summary>Have your teacher&apos;s grade boundaries?</summary>
         <p class="help">Minimum weighted total (out of 100) for each grade. Saved in the link.</p>
@@ -183,23 +180,20 @@ function SubjectForm({
                 max={100}
                 aria-label={`Minimum total for grade ${g}`}
                 placeholder={String(DEFAULT_BOUNDARIES[bi])}
-                value={bounds?.[bi] ?? ''}
+                value={draftBounds[bi] ?? ''}
                 onInput={(e) => {
                   const v = (e.target as HTMLInputElement).value;
-                  const next = [0, 1, 2, 3, 4, 5].map((j) => bounds?.[j] ?? null);
+                  const next = [0, 1, 2, 3, 4, 5].map((j) => draftBounds[j] ?? null);
                   next[bi] = v === '' ? null : Number(v);
+                  setDraftBounds(next);
                   onBounds(next.every((n) => typeof n === 'number') ? (next as number[]) : null);
                 }}
               />
             </label>
           ))}
         </div>
-        {customBounds && (
-          <button
-            type="button"
-            class="linklike"
-            onClick={() => onBounds(null)}
-          >
+        {bounds !== null && (
+          <button type="button" class="linklike" onClick={() => onBounds(null)}>
             Back to the default estimate
           </button>
         )}
@@ -208,7 +202,7 @@ function SubjectForm({
         <p>
           <a
             class="btn btn-primary"
-            href={diplomaLinkFor(findSlotForBase(base), grade as Grade, base, level)}
+            href={diplomaLinkFor(findSlotForBase(base), grade, base, level)}
           >
             Use in diploma calculator ›
           </a>
@@ -219,32 +213,23 @@ function SubjectForm({
 }
 
 export function SubjectApp() {
-  const [base, setBase] = useState<string | null>(null);
-  const [level, setLevel] = useState<Level>('HL');
-  const [bounds, setBounds] = useState<number[] | null>(null);
-
-  useEffect(() => {
-    const parsed = parseSubjectHash(window.location.hash);
-    if (parsed.base !== null) setBase(parsed.base);
-    setLevel(parsed.level);
-    if (parsed.bounds !== null) setBounds(parsed.bounds);
-    (SubjectApp as { _marks?: (number | null)[] })._marks = parsed.marks;
-    track('example_loaded');
-  }, []);
-
-  const initialMarks = (SubjectApp as { _marks?: (number | null)[] })._marks;
+  const [initial] = useState(() => parseSubjectHash(window.location.hash));
+  const [base, setBase] = useState<string | null>(initial.base);
+  const [level, setLevel] = useState<Level>(initial.level);
+  const [bounds, setBounds] = useState<number[] | null>(initial.bounds);
+  const [seedMarks] = useState<(number | null)[]>(initial.marks);
+  const [liveMarks, setLiveMarks] = useState<(number | null)[]>(initial.marks);
 
   useEffect(() => {
     const t = window.setTimeout(() => {
-      const marks: (number | null)[] = [];
       window.history.replaceState(
         null,
         '',
-        `#${encodeSubjectHash({ base, level, marks, bounds })}`,
+        `#${encodeSubjectHash({ base, level, marks: liveMarks, bounds })}`,
       );
     }, 300);
     return () => window.clearTimeout(t);
-  }, [base, level, bounds]);
+  }, [base, level, liveMarks, bounds]);
 
   const slOnly = base !== null && isSlOnlySubject(base);
   const shownLevel = slOnly ? 'SL' : level;
@@ -310,7 +295,11 @@ export function SubjectApp() {
                 >
                   HL
                 </button>
-                <button type="button" aria-pressed={shownLevel === 'SL'} onClick={() => setLevel('SL')}>
+                <button
+                  type="button"
+                  aria-pressed={shownLevel === 'SL'}
+                  onClick={() => setLevel('SL')}
+                >
                   SL
                 </button>
               </div>
@@ -340,11 +329,13 @@ export function SubjectApp() {
             <h2 id="marks-h">Your marks</h2>
             <div class="card">
               <SubjectForm
-                key={`${base}|${shownLevel}|${initialMarks === undefined ? '' : 'h'}`}
+                key={`${base}|${shownLevel}`}
                 base={base}
                 level={shownLevel}
                 bounds={bounds}
                 onBounds={setBounds}
+                seedMarks={seedMarks}
+                onMarks={setLiveMarks}
               />
             </div>
           </section>
@@ -378,6 +369,8 @@ export function SubjectApp() {
   );
 }
 
-export function trackSubjectView() {
-  track('faq_opened', { q: 1 });
+const root = document.getElementById('root');
+if (root) {
+  root.replaceChildren();
+  render(<SubjectApp />, root);
 }

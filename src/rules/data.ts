@@ -103,6 +103,7 @@ export const SL_ONLY_MARKERS = [
   'literature and performance',
   'school-based syllabus',
   'school based syllabus',
+  'turkey in the 20th century',
 ];
 
 export function isSlOnlySubject(name: string): boolean {
@@ -146,6 +147,7 @@ export const SUBJECT_CATALOGUE: CatalogueGroup[] = [
       { name: 'Philosophy' },
       { name: 'Psychology' },
       { name: 'Social and cultural anthropology' },
+      { name: 'Turkey in the 20th Century', slOnly: true },
       { name: 'World religions', slOnly: true },
     ],
   },
@@ -243,6 +245,7 @@ export const SLOTS: SlotDef[] = [
       'Philosophy',
       'Psychology',
       'Social and cultural anthropology',
+      'Turkey in the 20th Century',
       'World religions',
       'Environmental systems and societies',
     ],
@@ -329,7 +332,10 @@ export function inferSlotBase(name: string): { base: string; lang: string | null
     if (trimmed.toLowerCase().startsWith(prefix.toLowerCase())) {
       const rest = trimmed.slice(prefix.length);
       for (const [full, short] of Object.entries(LANGUAGE_SHORT)) {
-        if (rest.toLowerCase() === short.toLowerCase() || rest.toLowerCase() === full.toLowerCase()) {
+        if (
+          rest.toLowerCase() === short.toLowerCase() ||
+          rest.toLowerCase() === full.toLowerCase()
+        ) {
           return { base: full, lang };
         }
       }

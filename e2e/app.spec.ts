@@ -1,6 +1,23 @@
 import { expect, test } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 
+test('core picks light up and read +3', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Try an example' }).click();
+  await page.locator('.result-card').getByText('33/45').waitFor();
+  const tokB = page.getByRole('radio', { name: 'TOK grade B' });
+  const eeA = page.getByRole('radio', { name: 'Extended Essay grade A' });
+  await eeA.click();
+  await expect(tokB).toHaveAttribute('aria-checked', 'true');
+  await expect(eeA).toHaveAttribute('aria-checked', 'true');
+  await expect(tokB).toHaveCSS('background-color', 'rgb(199, 234, 124)');
+  await expect(eeA).toHaveCSS('background-color', 'rgb(199, 234, 124)');
+  await expect(page.locator('.result-card').getByText('+3')).toBeVisible();
+  // Deselect clears the highlight again.
+  await tokB.click();
+  await expect(tokB).toHaveAttribute('aria-checked', 'false');
+});
+
 test('scenario 1: Deniz sees 33/45 on track and P01 plan', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'Try an example' }).click();

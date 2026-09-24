@@ -94,6 +94,12 @@ describe('subject-page handoff (#use=SLOT:GRADE&us=BASE&ul=LEVEL)', () => {
       base: 'Chemistry',
       level: 'HL',
     });
+    expect(parseSubjectUse('?use=3:6&us=Chemistry&ul=HL')).toEqual({
+      slot: 3,
+      grade: 6,
+      base: 'Chemistry',
+      level: 'HL',
+    });
   });
 
   it('rejects partial or invalid handoffs', () => {

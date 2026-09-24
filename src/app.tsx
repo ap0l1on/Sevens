@@ -98,6 +98,7 @@ function withInferredBases(input: Input): Input {
     ...input,
     subjects: input.subjects.map((s) => {
       if (s.base !== undefined) return s;
+      if (s.name.trim() === '') return { ...s, base: null, lang: null };
       const inferred = inferSlotBase(s.name);
       return { ...s, base: inferred.base, lang: inferred.lang };
     }),
@@ -566,7 +567,14 @@ export function App() {
       if (sub) {
         const subjects = input.subjects.map((s, i) =>
           i === use.slot
-            ? { ...s, base: use.base, lang: null, name: use.base, level: use.level, grade: use.grade }
+            ? {
+                ...s,
+                base: use.base,
+                lang: null,
+                name: use.base,
+                level: use.level,
+                grade: use.grade,
+              }
             : s,
         );
         input = { ...input, subjects };
@@ -735,8 +743,11 @@ export function App() {
           Sevens
         </a>
         <nav aria-label="Page sections">
-          <a class="header-link" href="#calculator">
-            Calculator
+          <a class="header-link" href="index.html" aria-current="page">
+            Diploma score
+          </a>
+          <a class="header-link" href="subject.html">
+            Subject grade
           </a>
           <a class="header-link" href="#faq">
             How it works

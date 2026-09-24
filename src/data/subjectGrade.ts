@@ -56,9 +56,7 @@ export function gradeForTotal(total: number, bounds: number[]): Grade {
 
 /** URL-safe slug for a subject base name, e.g. 'Chemistry' -> 'chemistry'. */
 export function slugifyBase(base: string): string {
-  return base
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '');
+  return base.toLowerCase().replace(/[^a-z0-9]+/g, '');
 }
 
 /** Reverse a slug to a catalogue base name, or null when unknown. */
@@ -93,7 +91,9 @@ export function encodeSubjectHash(state: SubjectPageState): string {
   if (state.base !== null) parts.push(`s=${encodeURIComponent(slugifyBase(state.base))}`);
   parts.push(`l=${state.level}`);
   if (state.marks.some((m) => m !== null && m !== undefined)) {
-    parts.push(`m=${state.marks.map((m) => (m === null || m === undefined ? '' : String(m))).join(',')}`);
+    parts.push(
+      `m=${state.marks.map((m) => (m === null || m === undefined ? '' : String(m))).join(',')}`,
+    );
   }
   if (state.bounds !== null) parts.push(`b=${state.bounds.join(',')}`);
   return parts.join('&');

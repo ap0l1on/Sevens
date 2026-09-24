@@ -92,6 +92,27 @@ body {
   gap: 16px;
   align-items: center;
 }
+@media (max-width: 639px) {
+  .header {
+    flex-wrap: wrap;
+    height: auto;
+    padding-top: 12px;
+    padding-bottom: 12px;
+    row-gap: 8px;
+  }
+  .header nav {
+    width: 100%;
+    gap: 12px;
+  }
+  .header-link {
+    font-size: 15px;
+  }
+}
+.header-link[aria-current='page'] {
+  color: var(--apple-strong);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
 
 .main {
   width: 100%;
@@ -247,65 +268,12 @@ body {
     padding: 24px;
   }
 }
-.subj-card.flash {
-  background: var(--apple-soft);
-}
-
-/* Subject grade calculator panel */
-.grade-panel {
-  display: grid;
-  gap: 16px;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 20px 16px;
-}
-@media (min-width: 1024px) {
-  .grade-panel {
-    padding: 24px;
-  }
-}
-.panel-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-.panel-close {
-  min-width: 44px;
-}
-.panel-mode {
-  display: flex;
-}
-.panel-mode button {
-  flex: 1;
-  min-height: 44px;
-}
-.panel-comps {
-  display: grid;
-  gap: 16px;
-}
-.mark-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 8px;
-  align-items: end;
-}
+/* Subject grade calculator page */
 .mark-name {
-  grid-column: 1 / -1;
   font-size: 14px;
   font-weight: 600;
 }
-.mark-row label,
-.bounds-row label {
-  display: grid;
-  gap: 4px;
-  font-size: 14px;
-  color: var(--muted);
-}
-.mark-row input,
 .bounds-row input,
-.custom-row input,
 .slot-name {
   height: 44px;
   border-radius: 12px;
@@ -331,48 +299,98 @@ body {
   gap: 8px;
 }
 .bounds-row label {
+  display: grid;
+  gap: 4px;
+  font-size: 14px;
+  color: var(--muted);
   min-width: 56px;
   flex: 1;
 }
-.custom-grid {
-  display: grid;
-  gap: 8px;
+.subject-main {
+  max-width: 720px;
 }
-.custom-row {
-  display: grid;
-  grid-template-columns: 1fr 110px;
-  gap: 8px;
-}
-.standalone-picks {
+.pick-card {
   display: grid;
   gap: 16px;
-  margin-bottom: 20px;
 }
-.standalone-picks label {
+.mark-list {
+  display: grid;
+  gap: 20px;
+}
+.mark-bigrow {
   display: grid;
   gap: 8px;
-  font-size: 14px;
-  font-weight: 600;
+}
+.mark-inputs {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.mark-inputs > input {
+  flex: 1 1 160px;
+  min-width: 0;
+  min-height: 56px;
+  border-radius: 12px;
+  border: 1px solid var(--control);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 18px;
+  padding: 0 16px;
+  font-family: inherit;
+}
+.mark-inputs > input:hover {
+  border-color: var(--text);
+}
+.mark-max {
   color: var(--muted);
+  font-size: 18px;
+  font-weight: 600;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
-.standalone-picks select {
-  height: 52px;
-  font-size: 16px;
+.max-edit {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 18px;
+  font-weight: 600;
+  white-space: nowrap;
+  margin-left: auto;
+  min-width: 0;
 }
-/* Phones: the panel becomes a bottom sheet. */
-@media (max-width: 639px) {
-  .subj-card .grade-panel {
-    position: fixed;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    z-index: 50;
-    max-height: 88vh;
-    overflow-y: auto;
-    border-radius: 20px 20px 0 0;
-    border-bottom: 0;
-    box-shadow: 0 -4px 24px rgb(31 42 20 / 0.18);
-  }
+.max-edit input {
+  width: 76px;
+  flex: none;
+  min-height: 56px;
+  border-radius: 12px;
+  border: 1px solid var(--control);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 18px;
+  padding: 0 12px;
+  font-family: inherit;
+}
+input.invalid {
+  border-color: var(--bad);
+  border-width: 2px;
+}
+.subject-result {
+  background: var(--apple-soft);
+  border: 2px solid var(--apple-strong);
+  border-radius: 16px;
+  padding: 24px 20px;
+  text-align: center;
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+}
+.subject-grade {
+  font-size: 96px;
+  line-height: 1;
+  font-weight: 700;
+  color: var(--text);
 }
 .subj-top {
   display: flex;
@@ -851,7 +869,10 @@ body {
 .mini-grade,
 .lock-btn,
 .faq details,
-.combo input {
+.slot-select,
+.slot-name,
+.mark-inputs > input,
+.max-edit input {
   transition:
     background 150ms ease-out,
     color 150ms ease-out,
