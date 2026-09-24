@@ -1008,7 +1008,14 @@ export function App() {
 
           <div class="result-wrap">
             <section
-              class="card result-card"
+              class={
+                'card result-card' +
+                (result.status === 'on_track'
+                  ? ' is-ok'
+                  : result.status === 'not_on_track'
+                    ? ' is-bad'
+                    : '')
+              }
               ref={resultCardRef as unknown as never}
               aria-live="polite"
               aria-label="Result"

@@ -1,15 +1,16 @@
-/* Sevens design tokens — section 6. Light on :root, dark under prefers-color-scheme. */
+/* Sevens design tokens — light white + apple green. Light on :root, dark under
+   prefers-color-scheme. Text pairs hold 4.5:1 or more (WCAG 2.x formula). */
 :root {
-  --bg: #fafaf7;
+  --bg: #ffffff;
   --surface: #ffffff;
   --surface-2: #f2f1ec;
   --border: #e2e0d8;
   --control: #8a877c;
   --text: #1a1a17;
   --muted: #5c5a52;
-  --accent: #5b3cc4;
+  --accent: #1e7e34;
   --on-accent: #ffffff;
-  --accent-soft: #eeeafb;
+  --accent-soft: #e4f5e9;
   --ok: #166534;
   --ok-soft: #e7f5ec;
   --warn: #a15c07;
@@ -27,9 +28,9 @@
     --control: #77756b;
     --text: #f2f1ec;
     --muted: #a8a69c;
-    --accent: #a594f9;
+    --accent: #30d158;
     --on-accent: #121210;
-    --accent-soft: #2a2440;
+    --accent-soft: #152b1d;
     --ok: #4ade80;
     --ok-soft: #15291c;
     --warn: #fbbf24;
