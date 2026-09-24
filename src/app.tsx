@@ -11,30 +11,19 @@ import {
   SLOTS,
   SLOT_LANGUAGES,
   slotSixSubjects,
-  SUBJECT_CATALOGUE,
   duplicateSlots,
   type Grade,
   type Input,
   type Offer,
 } from './rules/data';
-import {
-  getComponents,
-  gradeFromBoundaries,
-  roundGrade,
-  validateMarks,
-  weightedAverage,
-  weightedPercent,
-  type ComponentsEntry,
-  type MarkInput,
-} from './rules/components';
 import { planOffer } from './rules/planner';
-import { defaultInput, defaultOffer, encodeState, parseState } from './rules/url';
+import { slugifyBase } from './data/subjectGrade';
+import { defaultInput, defaultOffer, encodeState, parseState, parseSubjectUse } from './rules/url';
 import { track } from './analytics';
 
 type State = {
   input: Input;
   offer: Offer;
-  bounds: Record<number, (number | null)[]>;
   showSlOffer: boolean;
   damaged: boolean;
   startSnapshot: { input: Input; total: number } | null;
@@ -42,7 +31,7 @@ type State = {
 };
 
 type Action =
-  | { type: 'INIT'; input: Input; offer: Offer; bounds: Record<number, number[]>; damaged: boolean }
+  | { type: 'INIT'; input: Input; offer: Offer; damaged: boolean }
   | { type: 'SET_NAME'; index: number; name: string }
   | { type: 'SET_SLOT_SUBJECT'; index: number; base: string }
   | { type: 'SET_LANG'; index: number; lang: string | null }
@@ -52,7 +41,6 @@ type Action =
   | { type: 'SET_TOK'; tok: Input['tok'] }
   | { type: 'SET_EE'; ee: Input['ee'] }
   | { type: 'SET_CAS'; cas: boolean }
-  | { type: 'SET_BOUNDS'; slot: number; values: (number | null)[] }
   | { type: 'SET_OFFER_TOTAL'; total: number | null }
   | { type: 'SET_OFFER_HL'; hl: Grade[] }
   | { type: 'SET_OFFER_SL'; sl: Grade[] }
@@ -123,7 +111,6 @@ function reducer(s: State, a: Action): State {
         ...s,
         input: withInferredBases(a.input),
         offer: a.offer,
-        bounds: a.bounds,
         damaged: a.damaged,
       };
     case 'SET_NAME': {
@@ -180,8 +167,6 @@ function reducer(s: State, a: Action): State {
       return { ...s, input: { ...s.input, ee: a.ee } };
     case 'SET_CAS':
       return { ...s, input: { ...s.input, cas: a.cas } };
-    case 'SET_BOUNDS':
-      return { ...s, bounds: { ...s.bounds, [a.slot]: a.values } };
     case 'SET_OFFER_TOTAL':
       return { ...s, offer: { ...s.offer, total: a.total } };
     case 'SET_OFFER_HL':
@@ -257,27 +242,17 @@ function SubjectRow({
   dispatch,
   hlDisabledReason,
   dup,
-  panelOpen,
-  onTogglePanel,
-  flash,
-  panelBounds,
-  onUseSlotGrade,
 }: {
   index: number;
   name: string;
-  base: string | null | undefined;
-  lang: string | null | undefined;
+  base: string | null;
+  lang: string | null;
   level: 'HL' | 'SL';
   grade: Grade | null;
   locked: boolean;
   dispatch: (a: Action) => void;
   hlDisabledReason: string | null;
   dup: boolean;
-  panelOpen: boolean;
-  onTogglePanel: () => void;
-  flash: boolean;
-  panelBounds: (number | null)[];
-  onUseSlotGrade: (grade: Grade) => void;
 }) {
   const slot = SLOTS[index] as (typeof SLOTS)[number];
   const label = `${name.trim() || `Subject ${index + 1}`} ${level} grade`;
@@ -318,7 +293,7 @@ function SubjectRow({
 
   return (
     <div
-      class={'subj-card' + (flash ? ' flash' : '')}
+      class="subj-card"
       id={`slot-card-${index}`}
       onKeyDown={onKey as unknown as (e: Event) => void}
     >
@@ -507,428 +482,17 @@ function SubjectRow({
         ))}
       </div>
       {grade === 1 && <p class="row-note bad">A grade 1 means no diploma, whatever the total.</p>}
-      <button type="button" class="linklike" onClick={onTogglePanel} aria-expanded={panelOpen}>
-        Work out this grade from my marks ›
-      </button>
-      {panelOpen && (
-        <GradePanel
-          key={`${base ?? 'none'}|${level}`}
-          heading={`Subject ${index + 1}`}
-          subjectLabel={name.trim() || `Subject ${index + 1}`}
-          base={base ?? null}
-          level={level}
-          bounds={panelBounds}
-          onBounds={(values) => dispatch({ type: 'SET_BOUNDS', slot: index, values })}
-          onUseGrade={onUseSlotGrade}
-          onClose={onTogglePanel}
-        />
-      )}
-    </div>
-  );
-}
-
-function GradePanel({
-  heading,
-  subjectLabel,
-  base,
-  level,
-  bounds,
-  onBounds,
-  onUseGrade,
-  onClose,
-}: {
-  heading: string;
-  subjectLabel: string;
-  base: string | null;
-  level: 'HL' | 'SL';
-  bounds: (number | null)[];
-  onBounds: (values: (number | null)[]) => void;
-  onUseGrade: (grade: Grade) => void;
-  onClose: () => void;
-}) {
-  const entry: ComponentsEntry | null = getComponents(base, level);
-  const [mode, setMode] = useState<'grades' | 'marks'>('grades');
-  const [customMode, setCustomMode] = useState(entry === null);
-  const compCount = entry && !customMode ? entry.components.length : 3;
-  const [compGrades, setCompGrades] = useState<(Grade | null)[]>(() =>
-    Array.from({ length: compCount }, () => null as Grade | null),
-  );
-  const [marks, setMarks] = useState<MarkInput[]>(() =>
-    Array.from({ length: compCount }, () => ({ mark: null, out: null })),
-  );
-  const [customNames, setCustomNames] = useState<string[]>(['', '', '']);
-  const [customWeights, setCustomWeights] = useState<string[]>(['', '', '']);
-  const panelRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    panelRef.current?.focus();
-  }, []);
-
-  const useCustom = customMode || entry === null;
-  const compNames: string[] = useCustom
-    ? customNames.map((n, i) => n.trim() || `Component ${i + 1}`)
-    : (entry as ComponentsEntry).components.map((c) => c.name);
-  const compWeights: number[] = useCustom
-    ? customWeights.map((w) => (w.trim() === '' ? NaN : Number(w)))
-    : (entry as ComponentsEntry).components.map((c) => c.weight);
-  const customSum = compWeights.reduce((a, w) => a + (Number.isFinite(w) ? (w as number) : 0), 0);
-  const weightsOk = useCustom
-    ? compWeights.every((w) => Number.isFinite(w) && (w as number) >= 0) && customSum === 100
-    : true;
-
-  const gradesComplete =
-    weightsOk && compGrades.length === compWeights.length && compGrades.every((g) => g !== null);
-  const avg = gradesComplete ? weightedAverage(compGrades as number[], compWeights) : null;
-  const gradeFromAvg = avg === null ? null : roundGrade(avg);
-
-  const parsedMarks: MarkInput[] = marks.map((m) => ({
-    mark: m.mark === null || Number.isNaN(m.mark) ? null : m.mark,
-    out: m.out === null || Number.isNaN(m.out) || (m.out as number) <= 0 ? null : (m.out as number),
-  }));
-  const markErrors = validateMarks(parsedMarks);
-  const missingNames = markErrors
-    .filter((e) => e.code === 'missing')
-    .map((e) => compNames[e.index] as string);
-  const pct =
-    weightsOk && markErrors.length === 0 ? weightedPercent(parsedMarks, compWeights) : null;
-  const boundsComplete = bounds.length === 6 && bounds.every((b) => typeof b === 'number');
-  const gradeFromPct =
-    pct === null || !boundsComplete ? null : gradeFromBoundaries(pct, bounds as number[]);
-
-  const resultGrade = mode === 'grades' ? gradeFromAvg : gradeFromPct;
-
-  function onKey(e: KeyboardEvent) {
-    if (e.key === 'Escape') {
-      e.stopPropagation();
-      onClose();
-    }
-  }
-
-  return (
-    <div
-      class="grade-panel"
-      ref={panelRef as unknown as never}
-      tabIndex={-1}
-      onKeyDown={onKey as unknown as (e: Event) => void}
-      role="dialog"
-      aria-label={`${subjectLabel} grade calculator`}
-    >
-      <div class="panel-head">
-        <strong>
-          {heading}: {subjectLabel} {level}
-        </strong>
-        <button
-          type="button"
-          class="btn btn-ghost panel-close"
-          onClick={onClose}
-          aria-label="Close grade calculator"
-        >
-          ✕
-        </button>
-      </div>
-      {entry === null && (
-        <p class="row-note">Components for this subject are coming soon. Use Custom mode below.</p>
-      )}
-      {entry !== null && !entry.verified && (
-        <p class="row-note">Weightings from the current subject guide. Check with your teacher.</p>
-      )}
-      {entry !== null && (
-        <button
-          type="button"
+      {base !== null && base !== OTHER_VALUE && base !== CUSTOM_VALUE ? (
+        <a
           class="linklike"
-          aria-pressed={customMode}
-          onClick={() => setCustomMode(!customMode)}
+          href={`subject.html#s=${encodeURIComponent(slugifyBase(base))}&l=${level}`}
         >
-          {customMode ? 'Use the listed components' : 'Use custom components instead'}
-        </button>
-      )}
-      {useCustom && (
-        <div class="custom-grid">
-          {[0, 1, 2].map((i) => (
-            <div key={i} class="custom-row">
-              <input
-                aria-label={`Custom component ${i + 1} name`}
-                placeholder={`Component ${i + 1}`}
-                value={customNames[i] ?? ''}
-                inputMode="text"
-                maxLength={30}
-                onInput={(e) =>
-                  setCustomNames(
-                    customNames.map((n, j) => (j === i ? (e.target as HTMLInputElement).value : n)),
-                  )
-                }
-              />
-              <input
-                aria-label={`Custom component ${i + 1} weight percent`}
-                placeholder="Weight %"
-                value={customWeights[i] ?? ''}
-                inputMode="decimal"
-                type="number"
-                min={0}
-                max={100}
-                onInput={(e) =>
-                  setCustomWeights(
-                    customWeights.map((n, j) =>
-                      j === i ? (e.target as HTMLInputElement).value : n,
-                    ),
-                  )
-                }
-              />
-            </div>
-          ))}
-          {!weightsOk && (
-            <p class="row-note warn">
-              Custom weights must add up to 100 (now {Number.isFinite(customSum) ? customSum : 0}).
-            </p>
-          )}
-        </div>
-      )}
-      <div class="seg panel-mode" role="radiogroup" aria-label="How to enter results">
-        <button
-          type="button"
-          role="radio"
-          aria-checked={mode === 'grades'}
-          onClick={() => setMode('grades')}
-        >
-          Component grades
-        </button>
-        <button
-          type="button"
-          role="radio"
-          aria-checked={mode === 'marks'}
-          onClick={() => setMode('marks')}
-        >
-          Marks
-        </button>
-      </div>
-      {mode === 'grades' ? (
-        <div class="panel-comps">
-          {compNames.map((cn, i) => (
-            <div key={i}>
-              <div class="help" id={`pcg-${heading}-${i}`}>
-                {cn} ({compWeights[i]}%)
-              </div>
-              <div
-                class="grade-row compact"
-                role="radiogroup"
-                aria-labelledby={`pcg-${heading}-${i}`}
-              >
-                {([1, 2, 3, 4, 5, 6, 7] as Grade[]).map((g) => (
-                  <button
-                    key={g}
-                    type="button"
-                    role="radio"
-                    aria-checked={compGrades[i] === g}
-                    aria-label={`${cn} grade ${g}`}
-                    class="grade-btn"
-                    onClick={() =>
-                      setCompGrades(
-                        compGrades.map((cg, j) => (j === i ? (cg === g ? null : g) : cg)),
-                      )
-                    }
-                  >
-                    {g}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
+          Work out this grade ›
+        </a>
       ) : (
-        <div class="panel-comps">
-          {compNames.map((cn, i) => (
-            <div key={i} class="mark-row">
-              <span class="mark-name">
-                {cn} ({compWeights[i]}%)
-              </span>
-              <label>
-                Mark
-                <input
-                  type="number"
-                  min={0}
-                  aria-label={`${cn} mark`}
-                  value={marks[i]?.mark ?? ''}
-                  onInput={(e) => {
-                    const v = (e.target as HTMLInputElement).value;
-                    setMarks(
-                      marks.map((m, j) =>
-                        j === i ? { ...m, mark: v === '' ? null : Number(v) } : m,
-                      ),
-                    );
-                  }}
-                />
-              </label>
-              <label>
-                Out of
-                <input
-                  type="number"
-                  min={1}
-                  aria-label={`${cn} out of`}
-                  value={marks[i]?.out ?? ''}
-                  onInput={(e) => {
-                    const v = (e.target as HTMLInputElement).value;
-                    setMarks(
-                      marks.map((m, j) =>
-                        j === i ? { ...m, out: v === '' ? null : Number(v) } : m,
-                      ),
-                    );
-                  }}
-                />
-              </label>
-            </div>
-          ))}
-          {markErrors.some((e) => e.code === 'over') && (
-            <p class="row-note bad">A mark can&apos;t be more than its out-of.</p>
-          )}
-          {markErrors.some((e) => e.code === 'negative') && (
-            <p class="row-note bad">Marks can&apos;t be negative.</p>
-          )}
-          {missingNames.length > 0 && (
-            <p class="row-note">Add {missingNames.join(', ')} to see your grade.</p>
-          )}
-          <details class="bounds-details">
-            <summary>Add grade boundaries</summary>
-            <p class="help">Copy the minimum % for each grade from your teacher.</p>
-            <div class="bounds-row">
-              {[2, 3, 4, 5, 6, 7].map((g, bi) => (
-                <label key={g}>
-                  {g}
-                  <input
-                    type="number"
-                    min={0}
-                    max={100}
-                    aria-label={`Minimum percent for grade ${g}`}
-                    value={bounds[bi] ?? ''}
-                    onInput={(e) => {
-                      const v = (e.target as HTMLInputElement).value;
-                      const next = [0, 1, 2, 3, 4, 5].map((j) => bounds[j] ?? null);
-                      next[bi] = v === '' ? null : Number(v);
-                      onBounds(next);
-                    }}
-                  />
-                </label>
-              ))}
-            </div>
-          </details>
-        </div>
-      )}
-      <div aria-live="polite">
-        {mode === 'grades' && avg !== null && gradeFromAvg !== null && (
-          <p>
-            Weighted average {avg.toFixed(1)} → estimated grade {gradeFromAvg}.
-          </p>
-        )}
-        {mode === 'marks' && pct !== null && gradeFromPct !== null && (
-          <p>
-            {pct.toFixed(1)}% → grade {gradeFromPct} (using your boundaries).
-          </p>
-        )}
-        {mode === 'marks' && pct !== null && !boundsComplete && (
-          <p>
-            {pct.toFixed(1)}%. Add your teacher&apos;s grade boundaries to turn this into a 1–7
-            grade.
-          </p>
-        )}
-      </div>
-      {resultGrade !== null && (
-        <button type="button" class="btn btn-primary" onClick={() => onUseGrade(resultGrade)}>
-          Use this grade
-        </button>
-      )}
-      {resultGrade !== null && (
-        <p class="row-note">
-          An estimate. Your final grade depends on the official grade boundaries for your exam
-          session and on moderation of your internal assessment.
-        </p>
-      )}
-    </div>
-  );
-}
-
-function StandaloneCalculator({
-  bounds,
-  onBounds,
-  onUseGrade,
-}: {
-  bounds: Record<number, (number | null)[]>;
-  onBounds: (slot: number, values: (number | null)[]) => void;
-  onUseGrade: (slot: number, grade: Grade) => void;
-}) {
-  const allBases = useMemo(() => {
-    const seen = new Set<string>();
-    const out: string[] = [];
-    for (const g of SUBJECT_CATALOGUE) {
-      for (const s of g.subjects) {
-        if (!seen.has(s.name)) {
-          seen.add(s.name);
-          out.push(s.name);
-        }
-      }
-    }
-    return out;
-  }, []);
-  const [base, setBase] = useState<string>('');
-  const [level, setLevel] = useState<'HL' | 'SL'>('HL');
-  const [target, setTarget] = useState<number>(0);
-  const key = `${base}|${level}`;
-  return (
-    <div>
-      <div class="standalone-picks">
-        <label>
-          Subject
-          <select
-            aria-label="Calculator subject"
-            value={base}
-            onChange={(e) => setBase((e.target as HTMLSelectElement).value)}
-          >
-            <option value="">Choose a subject…</option>
-            {allBases.map((n) => (
-              <option key={n} value={n}>
-                {n}
-              </option>
-            ))}
-          </select>
-        </label>
-        <div>
-          <span class="help" id="standalone-level-h">
-            Level
-          </span>
-          <div class="seg hlsl" role="radiogroup" aria-labelledby="standalone-level-h">
-            <button type="button" aria-pressed={level === 'HL'} onClick={() => setLevel('HL')}>
-              HL
-            </button>
-            <button type="button" aria-pressed={level === 'SL'} onClick={() => setLevel('SL')}>
-              SL
-            </button>
-          </div>
-        </div>
-        <label>
-          Fill into slot
-          <select
-            aria-label="Fill the grade into slot"
-            value={target}
-            onChange={(e) => setTarget(Number((e.target as HTMLSelectElement).value))}
-          >
-            {[0, 1, 2, 3, 4, 5].map((i) => (
-              <option key={i} value={i}>
-                Subject {i + 1} · {SLOTS[i]?.title}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
-      {base !== '' && (
-        <GradePanel
-          key={key}
-          heading="Calculator"
-          subjectLabel={base}
-          base={base}
-          level={level}
-          bounds={bounds[6] ?? []}
-          onBounds={(values) => onBounds(6, values)}
-          onUseGrade={(g) => onUseGrade(target, g)}
-          onClose={() => setBase('')}
-        />
+        <a class="linklike" href="subject.html">
+          Work out this grade ›
+        </a>
       )}
     </div>
   );
@@ -938,14 +502,11 @@ export function App() {
   const [state, dispatch] = useReducer<State, Action>(reducer, {
     input: defaultInput(),
     offer: defaultOffer(),
-    bounds: {},
     showSlOffer: false,
     damaged: false,
     startSnapshot: null,
     shareMsg: 'Copy link',
   });
-  const [openPanel, setOpenPanel] = useState<number | null>(null);
-  const [flashSlot, setFlashSlot] = useState<number | null>(null);
   const [resultOpen, setResultOpen] = useState(false);
   // Duplicate picks (second and later) don't count toward the total.
   const dupFlags = useMemo(
@@ -998,23 +559,30 @@ export function App() {
   useEffect(() => {
     const hash = window.location.hash.startsWith('#') ? window.location.hash.slice(1) : '';
     const parsed = parseState(hash || window.location.search);
-    dispatch({
-      type: 'INIT',
-      input: parsed.input,
-      offer: parsed.offer,
-      bounds: parsed.bounds,
-      damaged: parsed.damaged,
-    });
+    const use = parseSubjectUse(hash || window.location.search);
+    let input = withInferredBases(parsed.input);
+    if (use !== null) {
+      const sub = input.subjects[use.slot];
+      if (sub) {
+        const subjects = input.subjects.map((s, i) =>
+          i === use.slot
+            ? { ...s, base: use.base, lang: null, name: use.base, level: use.level, grade: use.grade }
+            : s,
+        );
+        input = { ...input, subjects };
+      }
+    }
+    dispatch({ type: 'INIT', input, offer: parsed.offer, damaged: parsed.damaged });
   }, []);
 
   // Hash sync after 300ms no input.
   useEffect(() => {
     const t = setTimeout(() => {
-      const qs = encodeState(state.input, state.offer, state.bounds);
+      const qs = encodeState(state.input, state.offer);
       window.history.replaceState(null, '', qs ? `#${qs}` : window.location.pathname);
     }, 300);
     return () => clearTimeout(t);
-  }, [state.input, state.offer, state.bounds]);
+  }, [state.input, state.offer]);
 
   // What-if starting point: first full result.
   useEffect(() => {
@@ -1111,7 +679,7 @@ export function App() {
   }, [result.total]);
 
   async function share() {
-    const qs = encodeState(state.input, state.offer, state.bounds);
+    const qs = encodeState(state.input, state.offer);
     const url = `${window.location.origin}${window.location.pathname}#${qs}`;
     const mobile = /Mobi|Android|iPhone|iPad/i.test(window.navigator.userAgent);
     if (
@@ -1149,17 +717,6 @@ export function App() {
     if (isSlOnlySubject(s.base ?? '') || isSlOnlySubject(s.name)) return 'Only offered at SL';
     return null;
   });
-
-  function useSlotGrade(index: number, grade: Grade) {
-    dispatch({ type: 'SET_GRADE', index, grade });
-    setFlashSlot(index);
-    setOpenPanel(null);
-    window.setTimeout(() => setFlashSlot(null), 1600);
-    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    document
-      .getElementById(`slot-card-${index}`)
-      ?.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'center' });
-  }
 
   // Count rules for row notes (2s/3s over limit). Duplicates don't count.
   const gradesAll = engineInput.subjects.map((s) => s.grade);
@@ -1215,19 +772,14 @@ export function App() {
                     <SubjectRow
                       index={i}
                       name={s.name}
-                      base={s.base}
-                      lang={s.lang}
+                      base={s.base ?? null}
+                      lang={s.lang ?? null}
                       level={s.level}
                       grade={s.grade}
                       locked={s.locked}
                       dispatch={dispatch}
                       hlDisabledReason={slOnlyAt[i] ?? null}
                       dup={dupFlags[i] ?? false}
-                      panelOpen={openPanel === i}
-                      onTogglePanel={() => setOpenPanel(openPanel === i ? null : i)}
-                      flash={flashSlot === i}
-                      panelBounds={state.bounds[i] ?? []}
-                      onUseSlotGrade={(g) => useSlotGrade(i, g)}
                     />
                     {(s.grade === 2 || s.grade === 3) && (count2 > 2 || countLe3 > 3) && (
                       <p class="row-note warn">This grade counts toward the 2s and 3s limits.</p>
@@ -1247,7 +799,7 @@ export function App() {
                   <div class="help" id="tok-h">
                     TOK grade
                   </div>
-                  <div class="grade-row" role="radiogroup" aria-labelledby="tok-h">
+                  <div class="grade-row seg" role="radiogroup" aria-labelledby="tok-h">
                     {(['A', 'B', 'C', 'D', 'E'] as const).map((g) => (
                       <button
                         key={g}
@@ -1269,7 +821,7 @@ export function App() {
                   <div class="help" id="ee-h">
                     Extended Essay grade
                   </div>
-                  <div class="grade-row" role="radiogroup" aria-labelledby="ee-h">
+                  <div class="grade-row seg" role="radiogroup" aria-labelledby="ee-h">
                     {(['A', 'B', 'C', 'D', 'E'] as const).map((g) => (
                       <button
                         key={g}
@@ -1593,20 +1145,6 @@ export function App() {
               </div>
             </section>
 
-            <section class="section" aria-labelledby="calc-h">
-              <h2 id="calc-h">Subject grade calculator</h2>
-              <p class="help">
-                Work out a subject grade from Paper marks and the IA, then fill it into a slot.
-              </p>
-              <div class="card">
-                <StandaloneCalculator
-                  bounds={state.bounds}
-                  onBounds={(slot, values) => dispatch({ type: 'SET_BOUNDS', slot, values })}
-                  onUseGrade={(slot, g) => useSlotGrade(slot, g)}
-                />
-              </div>
-            </section>
-
             <section class="section faq" id="faq" aria-labelledby="faq-h">
               <h2 id="faq-h">How it works</h2>
               {[
@@ -1757,7 +1295,7 @@ export function App() {
                   {result.status === 'on_track' ? (
                     <div>
                       <p class="breakdown">
-                        HL {result.hlPoints} · SL {result.slPoints} · Core {result.corePoints} (TOK{' '}
+                        HL {result.hlPoints} · SL {result.slPoints} · Core +{result.corePoints} (TOK{' '}
                         {state.input.tok} + EE {state.input.ee})
                         {result.hlCount === 4 ? ' (top 3 HL count for the 12-point rule)' : ''}
                       </p>

@@ -10,25 +10,8 @@ import {
   normalizeSubjectName,
   slotSixSubjects,
   type Grade,
-  type Input,
 } from '../src/rules/data';
-import { defaultOffer, encodeState, parseState } from '../src/rules/url';
-
-function baseInput(): Input {
-  return {
-    subjects: [
-      { name: 'Chemistry', level: 'HL', grade: 6, locked: false },
-      { name: 'Maths AA', level: 'HL', grade: 6, locked: false },
-      { name: 'Physics', level: 'HL', grade: 5, locked: false },
-      { name: 'English A', level: 'SL', grade: 5, locked: false },
-      { name: 'Turkish B', level: 'SL', grade: 5, locked: false },
-      { name: 'History', level: 'SL', grade: 4, locked: false },
-    ],
-    tok: 'B',
-    ee: 'C',
-    cas: true,
-  };
-}
+import { parseState, parseSubjectUse } from '../src/rules/url';
 
 describe('fixed slots', () => {
   it('has six slots with the specified headings and counts', () => {
@@ -90,44 +73,44 @@ describe('duplicates', () => {
   it('flags second and later picks, ignoring case and blanks', () => {
     expect(normalizeSubjectName('  History ')).toBe('history');
     expect(
-      duplicateSlots(['History', 'Chemistry', 'history', '', '  ', 'Environmental systems and societies', 'environmental systems and societies']),
+      duplicateSlots([
+        'History',
+        'Chemistry',
+        'history',
+        '',
+        '  ',
+        'Environmental systems and societies',
+        'environmental systems and societies',
+      ]),
     ).toEqual([false, false, true, false, false, false, true]);
   });
 });
 
-describe('grade boundaries in the hash', () => {
-  it('round-trips bounds', () => {
-    const qs = encodeState(baseInput(), defaultOffer(), { 2: [15, 30, 45, 55, 63, 75] });
-    expect(qs).toContain('gb=2:');
-    const parsed = parseState(`#${qs}`);
-    expect(parsed.damaged).toBe(false);
-    expect(parsed.bounds).toEqual({ 2: [15, 30, 45, 55, 63, 75] });
-  });
-
-  it('skips invalid bound entries when encoding', () => {
-    const qs = encodeState(baseInput(), defaultOffer(), {
-      9: [1, 2, 3, 4, 5, 6],
-      0: [1, 2],
-      1: [1, 2, 3, 4, 5, 'x' as unknown as number],
+describe('subject-page handoff (#use=SLOT:GRADE&us=BASE&ul=LEVEL)', () => {
+  it('parses a valid handoff', () => {
+    expect(parseSubjectUse('#use=3:6&us=Chemistry&ul=HL')).toEqual({
+      slot: 3,
+      grade: 6,
+      base: 'Chemistry',
+      level: 'HL',
     });
-    expect(qs).not.toContain('gb=');
-    const empty = encodeState(baseInput(), defaultOffer(), {});
-    expect(empty).not.toContain('gb=');
   });
 
-  it('drops bad gb values when parsing', () => {
-    expect(parseState('?gb=9:1,2,3,4,5,6').damaged).toBe(true);
-    expect(parseState('?gb=0:10,20,30,40,50,101').damaged).toBe(true);
-    expect(parseState('?gb').bounds).toEqual({});
-    expect(parseState('?gb=').bounds).toEqual({});
-    const good = parseState('?gb=0:10,20,30,40,50,60.6:5,15,25,35,45,55');
-    expect(good.bounds).toEqual({ 0: [10, 20, 30, 40, 50, 60], 6: [5, 15, 25, 35, 45, 55] });
+  it('rejects partial or invalid handoffs', () => {
+    expect(parseSubjectUse('')).toBeNull();
+    expect(parseSubjectUse('#s=H6-Chemistry')).toBeNull();
+    expect(parseSubjectUse('#use=9:6&us=Chemistry&ul=HL')).toBeNull();
+    expect(parseSubjectUse('#use=3:9&us=Chemistry&ul=HL')).toBeNull();
+    expect(parseSubjectUse('#use=3:6&us=&ul=HL')).toBeNull();
+    expect(parseSubjectUse('#use=3:6&us=Chemistry&ul=ML')).toBeNull();
+    expect(parseSubjectUse(null as unknown as string)).toBeNull();
   });
 
-  it('keeps old links loading without bounds', () => {
-    const parsed = parseState('?s=H6-Chemistry.H6-Physics.H5-Biology.S5-English.S5-Turkish.S4-History&tok=B&ee=C&cas=1');
+  it('keeps old links loading', () => {
+    const parsed = parseState(
+      '?s=H6-Chemistry.H6-Physics.H5-Biology.S5-English.S5-Turkish.S4-History&tok=B&ee=C&cas=1',
+    );
     expect(parsed.damaged).toBe(false);
-    expect(parsed.bounds).toEqual({});
     expect(parsed.input.subjects.map((s) => s.grade)).toEqual([6, 6, 5, 5, 5, 4] as Grade[]);
   });
 });
