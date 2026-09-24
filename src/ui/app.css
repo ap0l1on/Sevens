@@ -4,6 +4,7 @@
 }
 html {
   -webkit-text-size-adjust: 100%;
+  scroll-padding-bottom: 84px;
 }
 body {
   margin: 0;
@@ -144,19 +145,19 @@ body {
   background: transparent;
 }
 .btn-primary {
-  background: var(--accent);
-  color: var(--on-accent);
-  border-color: var(--accent);
+  background: var(--lime);
+  color: var(--on-lime);
+  border-color: var(--lime);
 }
 .btn-primary:hover {
-  border-color: var(--accent);
-  filter: brightness(0.94);
+  border-color: var(--lime);
+  filter: brightness(0.96);
 }
 
 .layout {
   display: grid;
-  gap: 40px;
-  margin-top: 24px;
+  gap: 48px;
+  margin-top: 32px;
 }
 @media (min-width: 960px) {
   .layout {
@@ -171,13 +172,13 @@ body {
 }
 
 .section {
-  margin-bottom: 40px;
+  margin-bottom: 52px;
 }
 .section h2 {
   font-size: 20px;
   line-height: 28px;
   font-weight: 650;
-  margin: 0 0 12px;
+  margin: 0 0 16px;
 }
 @media (min-width: 960px) {
   .section h2 {
@@ -196,13 +197,13 @@ body {
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 16px;
+  border-radius: 20px;
+  padding: 20px;
   box-shadow: 0 1px 2px rgb(0 0 0 / 0.06);
 }
 @media (min-width: 960px) {
   .card {
-    padding: 24px;
+    padding: 28px;
   }
 }
 @media (prefers-color-scheme: dark) {
@@ -211,24 +212,84 @@ body {
   }
 }
 
-/* Subject rows */
+/* Subject cards */
 .subj-list {
   display: grid;
+  gap: 16px;
+}
+.subj-card {
+  display: grid;
+  gap: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 20px 16px;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.06);
+  scroll-margin-bottom: 84px;
+}
+@media (prefers-color-scheme: dark) {
+  .subj-card {
+    box-shadow: none;
+  }
+}
+@media (min-width: 960px) {
+  .subj-card {
+    padding: 24px;
+  }
+}
+.subj-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.subj-title {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+.group-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.group-chips button {
+  min-height: 44px;
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--control);
+  background: var(--surface-2);
+  color: var(--text);
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+}
+.group-chips button:hover {
+  border-color: var(--text);
+}
+.group-chips button[aria-pressed='true'] {
+  background: var(--lime);
+  border-color: var(--lime);
+  color: var(--on-lime);
+}
+.subj-level {
+  display: flex;
+  align-items: center;
   gap: 12px;
 }
-.subj-row {
-  display: grid;
-  gap: 8px;
-}
-.subj-line1 {
-  display: flex;
-  gap: 8px;
-  align-items: center;
+.subj-level .help {
+  margin: 0;
 }
 .combo {
   position: relative;
-  flex: 1;
   min-width: 0;
+}
+.combo-hint {
+  padding: 0 8px 8px;
+  color: var(--muted);
+  font-size: 14px;
 }
 .combo input {
   width: 100%;
@@ -305,9 +366,9 @@ body {
 }
 .seg button[aria-pressed='true'],
 .seg button[aria-checked='true'] {
-  background: var(--accent);
-  color: var(--on-accent);
-  border-color: var(--accent);
+  background: var(--lime);
+  color: var(--on-lime);
+  border-color: var(--lime);
 }
 .seg button:disabled {
   opacity: 0.45;
@@ -423,12 +484,12 @@ body {
     background 150ms ease-out;
 }
 .switch[data-on='true'] {
-  background: var(--accent);
-  border-color: var(--accent);
+  background: var(--lime);
+  border-color: var(--lime);
 }
 .switch[data-on='true']::after {
   transform: translateX(18px);
-  background: var(--on-accent);
+  background: var(--on-lime);
 }
 
 /* Result */
@@ -514,7 +575,8 @@ body {
   background: var(--surface-2);
 }
 .band span.on {
-  background: var(--accent);
+  background: var(--lime);
+  border: 1px solid var(--accent);
 }
 .band-cap {
   font-size: 14px;
@@ -559,9 +621,9 @@ body {
   border-color: var(--text);
 }
 .mini-grade[aria-pressed='true'] {
-  background: var(--accent);
-  color: var(--on-accent);
-  border-color: var(--accent);
+  background: var(--lime);
+  color: var(--on-lime);
+  border-color: var(--lime);
 }
 .plan-list {
   margin: 8px 0;

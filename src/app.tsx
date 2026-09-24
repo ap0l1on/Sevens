@@ -178,15 +178,20 @@ function SubjectRow({
 }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState(name);
+  const [group, setGroup] = useState<number | null>(null);
   useEffect(() => setQ(name), [name]);
-  const filtered = useMemo(() => {
+  const GROUP_SHORT = ['Language', 'Acquisition', 'Societies', 'Sciences', 'Maths', 'Arts'];
+  const flat = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    const groups = SUBJECT_CATALOGUE.map((g) => ({
-      group: g.group,
-      items: g.subjects.filter((s) => !needle || s.name.toLowerCase().includes(needle)),
-    })).filter((g) => g.items.length > 0);
-    return groups;
-  }, [q]);
+    return SUBJECT_CATALOGUE.flatMap((g, gi) =>
+      g.subjects
+        .filter(
+          (s) =>
+            (group === null || gi === group) && (!needle || s.name.toLowerCase().includes(needle)),
+        )
+        .map((s) => ({ ...s, gi })),
+    );
+  }, [q, group]);
 
   const label = `${name.trim() || `Subject ${index + 1}`} ${level} grade`;
 
@@ -219,74 +224,9 @@ function SubjectRow({
   }
 
   return (
-    <div class="subj-row" onKeyDown={onKey as unknown as (e: Event) => void}>
-      <div class="subj-line1">
-        <div class="combo">
-          <input
-            aria-label={`Subject ${index + 1} name`}
-            placeholder={`Subject ${index + 1}`}
-            value={q}
-            inputMode="text"
-            onInput={(e) => {
-              const v = (e.target as HTMLInputElement).value;
-              setQ(v);
-              setOpen(true);
-              dispatch({ type: 'SET_NAME', index, name: v });
-            }}
-            onFocus={() => setOpen(true)}
-            onBlur={() => setTimeout(() => setOpen(false), 120)}
-          />
-          {open && (
-            <div class="combo-list" role="listbox" aria-label="Subject suggestions">
-              {filtered.map((g) => (
-                <div key={g.group}>
-                  <div class="combo-group">{g.group}</div>
-                  {g.items.map((s) => (
-                    <button
-                      key={s.name}
-                      type="button"
-                      role="option"
-                      aria-selected={name === s.name}
-                      class="combo-opt"
-                      onMouseDown={(e) => {
-                        e.preventDefault();
-                        dispatch({ type: 'SET_NAME', index, name: s.name });
-                        setQ(s.name);
-                        setOpen(false);
-                      }}
-                    >
-                      {s.name}
-                      {s.slOnly ? ' (SL)' : ''}
-                    </button>
-                  ))}
-                </div>
-              ))}
-              <div class="combo-group">Languages</div>
-              <div style={{ padding: '0 8px 8px', color: 'var(--muted)', fontSize: '14px' }}>
-                For Language A, B, ab initio: add language, e.g. English, Turkish. Quick picks:{' '}
-                {COMMON_LANGUAGES.slice(0, 6).join(', ')}.
-              </div>
-            </div>
-          )}
-        </div>
-        <div class="seg hlsl" role="group" aria-label={`Subject ${index + 1} level`}>
-          <button
-            type="button"
-            aria-pressed={level === 'HL'}
-            disabled={hlDisabledReason !== null}
-            title={hlDisabledReason ?? undefined}
-            onClick={() => dispatch({ type: 'SET_LEVEL', index, level: 'HL' })}
-          >
-            HL
-          </button>
-          <button
-            type="button"
-            aria-pressed={level === 'SL'}
-            onClick={() => dispatch({ type: 'SET_LEVEL', index, level: 'SL' })}
-          >
-            SL
-          </button>
-        </div>
+    <div class="subj-card" onKeyDown={onKey as unknown as (e: Event) => void}>
+      <div class="subj-top">
+        <span class="subj-title">Subject {index + 1}</span>
         <button
           type="button"
           class="lock-btn"
@@ -324,6 +264,88 @@ function SubjectRow({
           )}
         </button>
       </div>
+      <div class="group-chips" role="group" aria-label={`Subject ${index + 1} group`}>
+        <button type="button" aria-pressed={group === null} onClick={() => setGroup(null)}>
+          All
+        </button>
+        {GROUP_SHORT.map((short, gi) => (
+          <button
+            key={short}
+            type="button"
+            aria-pressed={group === gi}
+            aria-label={`Group ${gi + 1}: ${SUBJECT_CATALOGUE[gi]?.group ?? short}`}
+            onClick={() => setGroup(group === gi ? null : gi)}
+          >
+            {gi + 1} · {short}
+          </button>
+        ))}
+      </div>
+      <div class="combo">
+        <input
+          aria-label={`Subject ${index + 1} name`}
+          placeholder={`Subject ${index + 1}`}
+          value={q}
+          inputMode="text"
+          onInput={(e) => {
+            const v = (e.target as HTMLInputElement).value;
+            setQ(v);
+            setOpen(true);
+            dispatch({ type: 'SET_NAME', index, name: v });
+          }}
+          onFocus={() => setOpen(true)}
+          onBlur={() => setTimeout(() => setOpen(false), 120)}
+        />
+        {open && (
+          <div class="combo-list" role="listbox" aria-label="Subject suggestions">
+            {flat.map((s) => (
+              <button
+                key={`${s.gi}-${s.name}`}
+                type="button"
+                role="option"
+                aria-selected={name === s.name}
+                class="combo-opt"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  dispatch({ type: 'SET_NAME', index, name: s.name });
+                  setQ(s.name);
+                  setOpen(false);
+                }}
+              >
+                {s.name}
+                {s.slOnly ? ' (SL)' : ''}
+              </button>
+            ))}
+            <div class="combo-group">Languages</div>
+            <div class="combo-hint">
+              For Language A, B, ab initio: add language, e.g. English, Turkish. Quick picks:{' '}
+              {COMMON_LANGUAGES.slice(0, 6).join(', ')}.
+            </div>
+          </div>
+        )}
+      </div>
+      <div class="subj-level">
+        <span class="help" id={`level-h-${index}`}>
+          Level
+        </span>
+        <div class="seg hlsl" role="group" aria-labelledby={`level-h-${index}`}>
+          <button
+            type="button"
+            aria-pressed={level === 'HL'}
+            disabled={hlDisabledReason !== null}
+            title={hlDisabledReason ?? undefined}
+            onClick={() => dispatch({ type: 'SET_LEVEL', index, level: 'HL' })}
+          >
+            HL
+          </button>
+          <button
+            type="button"
+            aria-pressed={level === 'SL'}
+            onClick={() => dispatch({ type: 'SET_LEVEL', index, level: 'SL' })}
+          >
+            SL
+          </button>
+        </div>
+      </div>
       <div class="grade-row" role="radiogroup" aria-label={label}>
         {([1, 2, 3, 4, 5, 6, 7] as Grade[]).map((g) => (
           <button
@@ -335,8 +357,8 @@ function SubjectRow({
             class="grade-btn seg"
             style={{
               border: '1px solid var(--control)',
-              background: grade === g ? 'var(--accent)' : 'var(--surface-2)',
-              color: grade === g ? 'var(--on-accent)' : 'var(--text)',
+              background: grade === g ? 'var(--lime)' : 'var(--surface-2)',
+              color: grade === g ? 'var(--on-lime)' : 'var(--text)',
             }}
             onClick={() => dispatch({ type: 'SET_GRADE', index, grade: grade === g ? null : g })}
           >
