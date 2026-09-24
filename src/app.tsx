@@ -389,17 +389,20 @@ export function App() {
   const resultCardRef = useRef<HTMLDivElement>(null);
   const [showSticky, setShowSticky] = useState(false);
 
-  // Init from URL.
+  // Init from URL hash. Grades and offer state live in the hash (#...),
+  // never the query string, so they are never sent to any server.
+  // Legacy query-string links (?s=...) are migrated once into the hash.
   useEffect(() => {
-    const parsed = parseState(window.location.search);
+    const hash = window.location.hash.startsWith('#') ? window.location.hash.slice(1) : '';
+    const parsed = parseState(hash || window.location.search);
     dispatch({ type: 'INIT', input: parsed.input, offer: parsed.offer, damaged: parsed.damaged });
   }, []);
 
-  // URL sync after 300ms no input.
+  // Hash sync after 300ms no input.
   useEffect(() => {
     const t = setTimeout(() => {
       const qs = encodeState(state.input, state.offer);
-      window.history.replaceState(null, '', qs ? `/?${qs}` : '/');
+      window.history.replaceState(null, '', qs ? `#${qs}` : window.location.pathname);
     }, 300);
     return () => clearTimeout(t);
   }, [state.input, state.offer]);
@@ -500,7 +503,7 @@ export function App() {
 
   async function share() {
     const qs = encodeState(state.input, state.offer);
-    const url = `${window.location.origin}/?${qs}`;
+    const url = `${window.location.origin}${window.location.pathname}#${qs}`;
     const mobile = /Mobi|Android|iPhone|iPad/i.test(window.navigator.userAgent);
     if (
       mobile &&

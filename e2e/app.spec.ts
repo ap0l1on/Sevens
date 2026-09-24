@@ -33,7 +33,7 @@ test('share link round trip', async ({ page, context }) => {
 });
 
 test('hostile link opens clean page with note', async ({ page }) => {
-  await page.goto('?s=<script>alert(1)</script>');
+  await page.goto('#s=<script>alert(1)</script>');
   await expect(page.getByText('This link was damaged').first()).toBeVisible();
 });
 

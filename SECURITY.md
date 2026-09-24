@@ -6,8 +6,8 @@ Report security issues via GitHub Security Advisories (private). Do not open pub
 
 ## Scope
 
-- No backend, no accounts, no cookies. Grades stay in the browser; only the URL holds state.
+- No backend, no accounts, no cookies. Grades stay in the browser; only the URL hash holds state, so grades are never sent to any server.
 - No `innerHTML`, `dangerouslySetInnerHTML` or `eval`. ESLint enforces this.
-- URL parser is fuzzed (1000 hostile query strings) and never throws.
+- URL parser is fuzzed (1000 hostile hash strings) and never throws.
 - `npm audit --omit=dev` must show no high or critical advisories. Dependabot is on.
-- Cloudflare Pages headers are in `public/_headers`, including strict CSP with Umami `gateway.umami.is`.
+- `public/_headers` carries a strict CSP (Cloudflare Pages); `index.html` carries the same policy as a meta tag for GitHub Pages. Analytics is the Cloudflare beacon only.

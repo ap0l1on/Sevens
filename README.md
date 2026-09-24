@@ -15,6 +15,10 @@ Rules checked on 2026-09-24.
 - Node 22 LTS, Vite, TypeScript strict, Preact.
 - `npm install`, `npm run dev`, `npm test`, `npm run build`.
 
+## Analytics
+
+Cookieless visitor counts by Cloudflare Web Analytics.
+
 ## Disclaimer
 
 > This work/product/service has been developed independently from and is not endorsed by the International Baccalaureate Organization. International Baccalaureate, Baccalauréat International, Bachillerato Internacional and IB are registered trademarks owned by the International Baccalaureate Organization.

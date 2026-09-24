@@ -29,15 +29,10 @@
     />
     <meta name="twitter:image" content="https://ap0l1on.github.io/Sevens/og-1200x630.svg" />
     <meta name="robots" content="index,follow" />
-    <!-- Analytics skipped for launch. To enable Umami later, add:
-    <script
-      defer
-      src="https://cloud.umami.is/script.js"
-      data-website-id="YOUR-ID"
-      data-domains="ap0l1on.github.io"
-      data-exclude-search="true"
-    ></script>
-    data-exclude-search is mandatory: the query string holds grades. -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' https://static.cloudflareinsights.com; connect-src 'self' https://cloudflareinsights.com; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'; upgrade-insecure-requests"
+    />
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
@@ -108,5 +103,10 @@
       </main>
     </div>
     <script type="module" src="/src/main.tsx"></script>
+    <script
+      defer
+      src="https://static.cloudflareinsights.com/beacon.min.js"
+      data-cf-beacon='{"token": "%%CF_BEACON_TOKEN%%"}'
+    ></script>
   </body>
 </html>

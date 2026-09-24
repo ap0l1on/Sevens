@@ -32,8 +32,29 @@ describe('URL state', () => {
     expect(parsed.input.cas).toBe(true);
   });
 
-  it('hostile link opens clean page with damaged note, no throw', () => {
-    const parsed = parseState('?s=<script>alert(1)</script>');
+  it('round-trips Deniz scenario through the hash', () => {
+    const input: Input = {
+      subjects: [
+        { name: 'Chemistry', level: 'HL', grade: 6, locked: false },
+        { name: 'Physics', level: 'HL', grade: 5, locked: false },
+        { name: 'Biology', level: 'HL', grade: 5, locked: false },
+        { name: 'English A', level: 'SL', grade: 5, locked: false },
+        { name: 'Turkish B', level: 'SL', grade: 5, locked: false },
+        { name: 'History', level: 'SL', grade: 4, locked: false },
+      ],
+      tok: 'B',
+      ee: 'C',
+      cas: true,
+    };
+    const offer = { total: 36, hl: [] as never[], sl: [] as never[], subjectMins: [] };
+    const qs = encodeState(input, offer);
+    const parsed = parseState(`#${qs}`);
+    expect(parsed.damaged).toBe(false);
+    expect(parsed.input).toEqual(input);
+  });
+
+  it('hostile hash opens clean page with damaged note, no throw', () => {
+    const parsed = parseState('#s=<script>alert(1)</script>');
     expect(parsed.damaged).toBe(true);
     expect(parsed.input.subjects.length).toBe(6);
   });

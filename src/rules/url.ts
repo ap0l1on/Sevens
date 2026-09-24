@@ -65,14 +65,17 @@ export function encodeState(input: Input, offer: Offer): string {
   return qs;
 }
 
-/** Parse a query string (with or without leading '?'). Never throws. */
+/** Parse a state payload (URL hash content, with or without leading '#', or a
+ * legacy query string with or without leading '?'). Never throws. State lives
+ * in the hash so grades are never sent to any server. */
 export function parseState(search: string): ParsedState {
   let damaged = false;
   const input = defaultInput();
   const offer = defaultOffer();
 
   try {
-    let q = search.startsWith('?') ? search.slice(1) : search;
+    const noHash = search.startsWith('#') ? search.slice(1) : search;
+    let q = noHash.startsWith('?') ? noHash.slice(1) : noHash;
     if (q.length > 1500) {
       damaged = true;
       q = q.slice(0, 1500);
