@@ -1,0 +1,41 @@
+{
+  "name": "sevens",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Sevens — a free calculator for IB Diploma students: total out of 45, diploma check, and offer planner.",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build && npm run prerender",
+    "prerender": "node ./scripts/prerender.mjs",
+    "preview": "vite preview",
+    "test": "vitest run --coverage",
+    "test:watch": "vitest",
+    "e2e": "playwright test",
+    "lint": "eslint src tests scripts --ext .ts,.tsx,.js,.mjs",
+    "format": "prettier --check .",
+    "format:write": "prettier --write .",
+    "typecheck": "tsc --noEmit",
+    "lhci": "lhci autorun"
+  },
+  "dependencies": {
+    "preact": "^10.26.4"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.10.1",
+    "@playwright/test": "^1.49.1",
+    "@preact/preset-vite": "^2.10.1",
+    "@types/node": "^22.9.0",
+    "@vitest/coverage-v8": "^3.2.4",
+    "eslint": "^9.18.0",
+    "eslint-plugin-preact": "^0.1.0",
+    "playwright": "^1.49.1",
+    "preact-render-to-string": "^6.5.13",
+    "prettier": "^3.4.2",
+    "typescript": "~5.7.2",
+    "typescript-eslint": "^8.70.1",
+    "vite": "^6.0.7",
+    "vitest": "^3.2.4"
+  }
+}

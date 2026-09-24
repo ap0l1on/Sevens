@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://sevens.example/sitemap.xml

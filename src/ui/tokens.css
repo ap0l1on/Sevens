@@ -1,0 +1,40 @@
+/* Sevens design tokens — section 6. Light on :root, dark under prefers-color-scheme. */
+:root {
+  --bg: #fafaf7;
+  --surface: #ffffff;
+  --surface-2: #f2f1ec;
+  --border: #e2e0d8;
+  --control: #8a877c;
+  --text: #1a1a17;
+  --muted: #5c5a52;
+  --accent: #5b3cc4;
+  --on-accent: #ffffff;
+  --accent-soft: #eeeafb;
+  --ok: #166534;
+  --ok-soft: #e7f5ec;
+  --warn: #a15c07;
+  --warn-soft: #fdf3e2;
+  --bad: #b42318;
+  --bad-soft: #fdecea;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #121210;
+    --surface: #1b1b18;
+    --surface-2: #25241f;
+    --border: #34332c;
+    --control: #77756b;
+    --text: #f2f1ec;
+    --muted: #a8a69c;
+    --accent: #a594f9;
+    --on-accent: #121210;
+    --accent-soft: #2a2440;
+    --ok: #4ade80;
+    --ok-soft: #15291c;
+    --warn: #fbbf24;
+    --warn-soft: #2e2410;
+    --bad: #f87171;
+    --bad-soft: #321a18;
+  }
+}
