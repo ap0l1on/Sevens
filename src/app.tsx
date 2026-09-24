@@ -1172,12 +1172,12 @@ export function App() {
           </p>
           <p>Estimates only. Your school and the IB decide your final results.</p>
           <p>
-            <a href="https://github.com/sevens" target="_blank" rel="noreferrer">
+            <a href="https://github.com/ap0l1on/Sevens" target="_blank" rel="noreferrer">
               Source code on GitHub
             </a>
             {' · '}
             <a
-              href="https://github.com/sevens/issues/new?template=wrong-result.md"
+              href="https://github.com/ap0l1on/Sevens/issues/new?template=wrong-result.md"
               target="_blank"
               rel="noreferrer"
               onClick={() => track('report_clicked')}

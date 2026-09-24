@@ -2,7 +2,7 @@
 
 A free calculator for IB Diploma students: total out of 45, diploma check, and offer planner.
 
-Live URL: https://sevens.example/
+Live URL: https://ap0l1on.github.io/Sevens/
 
 ## How the rules are sourced
 
